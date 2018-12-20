@@ -1,0 +1,317 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_master_screens
+#define wall_master_screens
+
+#include <inlib/net/base_socket>
+
+///////////////////////////////////////////////////////////////
+/// screen client connection //////////////////////////////////
+///////////////////////////////////////////////////////////////
+inline bool get_screen_data(inlib::net::base_socket& a_socket,
+			    unsigned int& a_cols,unsigned int& a_rows,
+                            unsigned int& a_col,unsigned int& a_row,
+                            unsigned int& a_ww,unsigned int& a_wh,
+                            unsigned int& a_bw,unsigned int& a_bh){
+  inlib::uint64 sz;
+  if(!a_socket.fetch<inlib::uint64>(sz)) return false;
+  char* buffer = new char[(unsigned int)sz];
+  if(!a_socket.fetch_buffer(buffer,sz)) {delete [] buffer;return false;}
+  char* pos = buffer;
+  unsigned int n;
+  n = inlib::read_buffer<unsigned int>(pos,a_cols);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_rows);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_col);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_row);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_ww);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_wh);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_bw);pos +=n;
+  n = inlib::read_buffer<unsigned int>(pos,a_bh);pos +=n;
+  delete [] buffer;
+  return true;
+}
+
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+
+#include <list>
+
+typedef std::list<inlib::net::base_socket*> screens_t;
+
+#include <ostream>
+
+template <class T>
+inline bool send(std::ostream& a_out,screens_t& a_screens,const T& a_v) {
+  bool status = true;
+  screens_t::iterator it;
+  for(it=a_screens.begin();it!=a_screens.end();) {
+    inlib::net::base_socket* client = (*it);
+    if(!client->send<T>(a_v)) {
+      a_out << "send<T>(screens) :"
+            << " failed." 
+            << std::endl;
+      it = a_screens.erase(it);
+      delete client;            
+      status = false;
+      continue;
+    }
+    ++it;
+  }
+  return status;
+}
+
+inline bool send_buffer(std::ostream& a_out,screens_t& a_screens,
+                        const char* a_buffer,inlib::uint64 a_length,
+                        inlib::uint64 a_BLOCK = 65536) {
+  bool status = true;
+  screens_t::iterator it;
+  for(it=a_screens.begin();it!=a_screens.end();) {
+    inlib::net::base_socket* client = (*it);
+    if(!client->send_buffer(a_buffer,a_length,a_BLOCK)) {
+      a_out << "send_buffer(screens) :"
+            << " failed." 
+            << std::endl;
+      it = a_screens.erase(it);
+      delete client;            
+      status = false;
+      continue;
+    }
+    ++it;
+  }
+  return status;
+}
+
+#include <inlib/wall/send_event>
+
+inline bool send_event(std::ostream& a_out,screens_t& a_screens,const inlib::wall::event& a_event) {
+  bool status = true;
+  screens_t::iterator it;
+  for(it=a_screens.begin();it!=a_screens.end();) {
+    inlib::net::base_socket* client = (*it);
+    if(!inlib::wall::send_event(*client,a_event)) {
+      a_out << "send_event (screens) :"
+            << " send_event failed." 
+            << std::endl;
+      it = a_screens.erase(it);
+      delete client;            
+      status = false;
+      continue;
+    }
+    ++it;
+  }
+  return status;
+}
+
+inline bool send_event_to_client(std::ostream& a_out,screens_t& a_screens,unsigned int a_index,
+                                 const inlib::wall::event& a_event) {
+  unsigned int count = 0;
+  for(screens_t::iterator it=a_screens.begin();it!=a_screens.end();++it,count++) {
+    if(count!=a_index) continue;
+    inlib::net::base_socket* client = (*it);
+    if(!inlib::wall::send_event(*client,a_event)) {
+      a_out << "send_event (screens) :"
+            << " send_event failed." 
+            << std::endl;
+      a_screens.erase(it);
+      delete client;            
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+inline void stop_screens(screens_t& a_screens) {
+  screens_t::iterator it;
+  while(!a_screens.empty()) {
+    it = a_screens.begin();
+    inlib::net::base_socket* client = *it;
+    a_screens.erase(it);
+    delete client;
+  }
+}
+
+inline bool send_string(std::ostream& a_out,screens_t& a_screens,const std::string& a_string){
+  inlib::wall::event event;
+  event.user.code = inlib::wall::EVT_USER_STRING();
+  fill_event_with_string(a_string,event);
+  bool status = send_event(a_out,a_screens,event);
+  delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+  inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+  return status;
+}
+
+inline bool send_command(std::ostream& a_out,screens_t& a_screens,const std::string& a_string){
+  inlib::wall::event event;
+  event.user.code = inlib::wall::EVT_USER_COMMAND();
+  fill_event_with_string(a_string,event);
+  bool status = send_event(a_out,a_screens,event);
+  delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+  inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+  return status;
+}
+
+#include "strings"
+
+inline bool send_warn(std::ostream& a_out,screens_t& a_screens,const std::string& a_string,bool a_warn = true){
+  std::string cmd;
+  cmd = a_warn?s_warn():s_message();
+  cmd += "\n";
+  cmd += a_string;
+  return send_string(a_out,a_screens,cmd);
+}
+
+inline bool send_file(std::ostream& a_out,screens_t& a_screens,int a_code,const std::string& a_file){
+  inlib::wall::event event;
+  event.user.code = a_code;
+  if(a_file.empty() || !inlib::file::exists(a_file)) {
+    //a_out << "send_file :"
+    //      << " file " << inlib::sout(a_file) << " does not exist."
+    //      << " continue anyway."
+    //      << std::endl;
+    //have to send something to the waiting client :
+    fill_event_with_string("",event);
+  } else {
+    fill_event_with_file(a_out,a_file,event);
+  }
+  bool status = send_event(a_out,a_screens,event);
+  delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+  inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+  return status;
+}
+
+inline bool send_loop_file(std::ostream& a_out,screens_t& a_screens,int a_code,const std::vector<std::string>& a_files) {
+  if(a_files.empty()) return false;
+
+  std::vector<std::string>::const_iterator itf = a_files.begin();
+  
+  // we must loop on all screens once.
+  screens_t::iterator it;
+  for(it=a_screens.begin();it!=a_screens.end();++it) {
+    const std::string& file = (*itf);
+    ++itf;
+    if(itf==a_files.end()) itf = a_files.begin();
+
+    inlib::wall::event event;
+    event.user.code = a_code;
+
+    if(file.empty() || !inlib::file::exists(file)) {
+      //have to send something to the waiting client :
+      fill_event_with_string("",event);
+    } else {
+      fill_event_with_file(a_out,file,event);
+    }
+
+
+    inlib::net::base_socket* client = (*it);
+    bool status = inlib::wall::send_event(*client,event);
+    delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+
+    if(!status) {
+      a_out << "send_event (screens) :"
+            << " send_event failed." 
+            << std::endl;
+      a_screens.erase(it);
+      delete client;            
+      return false;
+    }
+  }
+  return true;
+}
+
+inline bool send_buffer(std::ostream& a_out,screens_t& a_screens,int a_code,inlib::uint64 a_length,const char* a_buffer){
+  inlib::wall::event event;
+  event.user.code = a_code;
+  if(!a_length) {
+    //have to send something to the waiting client :
+    fill_event_with_string("",event);
+    bool status = send_event(a_out,a_screens,event);
+    delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    return status;
+  } else {
+    event.type = inlib::wall::EVT_USEREVENT;
+    event.user.type = inlib::wall::EVT_USEREVENT;
+    inlib::write_buffer<unsigned int>(a_length,(char*)&(event.user.data1));
+    event.user.data2 = (void*)a_buffer;
+    return send_event(a_out,a_screens,event);
+  }
+}
+
+inline bool send_buffer_to_client(std::ostream& a_out,screens_t& a_screens,unsigned int a_index,
+                                  int a_code,inlib::uint64 a_length,const char* a_buffer){
+  inlib::wall::event event;
+  event.user.code = a_code;
+  if(!a_length) {
+    //have to send something to the waiting client :
+    fill_event_with_string("",event);
+    bool status = send_event_to_client(a_out,a_screens,a_index,event);
+    delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    return status;
+  } else {
+    event.type = inlib::wall::EVT_USEREVENT;
+    event.user.type = inlib::wall::EVT_USEREVENT;
+    inlib::write_buffer<unsigned int>(a_length,(char*)&(event.user.data1));
+    event.user.data2 = (void*)a_buffer;
+    return send_event_to_client(a_out,a_screens,a_index,event);
+  }
+}
+
+inline bool send_window_master_size(std::ostream& a_out,screens_t& a_screens,unsigned int a_w,unsigned int a_h){
+  inlib::wall::event event;
+  event.type = inlib::wall::EVT_USEREVENT;
+  event.user.type = inlib::wall::EVT_USEREVENT;
+  event.user.code = inlib::wall::EVT_USER_WINDOW_MASTER_SIZE();
+  inlib::write_buffer<unsigned int>(a_w,(char*)&(event.user.data1));
+  inlib::write_buffer<unsigned int>(a_h,(char*)&(event.user.data2));
+  return send_event(a_out,a_screens,event);
+}
+
+#include <inlib/wall/get_event>
+#include <inlib/wall/events>
+
+inline void fetch_screens_events(std::ostream& a_out,screens_t& a_screens,inlib::wall::events& a_events) {
+  //a_events.clear(); //do not clear.
+  screens_t::iterator it;
+  for(it=a_screens.begin();it!=a_screens.end();) {
+    inlib::net::base_socket* client = *it;
+    bool have_input;
+    if(!client->is_there_input(have_input)) {
+      a_out << "fetch_screens_events : is_there_input failed"
+            << std::endl;
+      it = a_screens.erase(it);
+      delete client;            
+      continue;
+    }
+    if(have_input) {
+      inlib::wall::event event;
+      if(!inlib::wall::wait_event(*client,event)) {
+        a_out << "fetch_screens_events : wait_event failed"
+              << std::endl;
+        it = a_screens.erase(it);
+        delete client;            
+        continue;
+      }
+      a_events.push_event(event,client);
+    }
+    it++;
+  }
+}
+
+#endif

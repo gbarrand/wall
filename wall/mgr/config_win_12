@@ -1,0 +1,37 @@
+
+  #echo 'debug : wall/mgr/config_win_12 : start ...'
+
+  winpc=Administrateur@134.158.89.134
+
+  cols=2;rows=1 # default
+  window_width=800
+  window_height=400
+  border_width=10
+  border_height=12
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=800
+
+  screen_hosts[0]=${winpc}
+  screen_hosts[1]=${winpc}
+
+  run_screens[0]=${run_cmd}
+  run_screens[1]=${run_cmd}
+
+  rs='1'
+  cs='1 2'
+
+  win_x[0]=0
+  win_y[0]=100
+
+  let win_x[1]=${window_width}+${border_width}+${border_width}
+  win_y[1]=100
+
+  monitors[0]=0
+  monitors[1]=0
+
+  full_screens[0]=0
+  full_screens[1]=0
+
+  window_no_decorations=0
+
+  x11_displays[0]='not_used'
+  x11_displays[1]='not_used'

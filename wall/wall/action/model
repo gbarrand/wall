@@ -1,0 +1,62 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file TouchSky.license for terms.
+
+#ifndef wall_action_model
+#define wall_action_model
+
+#include <inlib/sg/view_evd>
+
+#include "../sg/image_grid"
+
+namespace wall {
+namespace action {
+
+inline inlib::sg::return_action inc_modeling_scale(inlib::sg::gui_viewer& a_gv) {
+  inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+  if(!_evd) return inlib::sg::return_none;
+
+  typedef sg::image_grid grid_t;
+
+  inlib::sg::separator& ssep = _evd->static_sg();
+  grid_t* node = inlib::sg::find_first_node_of_class<grid_t>(a_gv.out(),ssep);
+  //grid_t* node = inlib::sg::search_node<grid_t>(a_gv.out(),ssep);
+  if(!node) {
+    a_gv.show_console("image_grid node not found");
+    return inlib::sg::return_none;  
+  }
+
+  node->modeling_scale_factor = node->modeling_scale_factor.value()+1;
+
+  a_gv.num2console(node->modeling_scale_factor.value());
+  a_gv.hide_popup(); //to avoid pointing toward a no more existing object.
+
+  return inlib::sg::return_to_render;     
+}
+
+inline inlib::sg::return_action dec_modeling_scale(inlib::sg::gui_viewer& a_gv) {
+  inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+  if(!_evd) return inlib::sg::return_none;
+
+  typedef sg::image_grid grid_t;
+
+  inlib::sg::separator& ssep = _evd->static_sg();
+  grid_t* node = inlib::sg::find_first_node_of_class<grid_t>(a_gv.out(),ssep);
+//grid_t* node = inlib::sg::search_node<grid_t>(a_gv.out(),ssep);
+  if(!node) {
+    a_gv.show_console("image_grid node not found");
+    return inlib::sg::return_none;  
+  }
+
+  if(node->modeling_scale_factor.value()>=1) {
+    node->modeling_scale_factor = node->modeling_scale_factor.value()-1;
+  }
+
+  a_gv.num2console(node->modeling_scale_factor.value());
+  a_gv.hide_popup(); //to avoid pointing toward a no more existing object.
+
+  return inlib::sg::return_to_render;     
+}
+
+}}
+
+#endif

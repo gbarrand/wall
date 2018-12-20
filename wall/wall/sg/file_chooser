@@ -1,0 +1,88 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_sg_file_chooser
+#define wall_sg_file_chooser
+
+#include <inlib/sg/base_fch>
+
+#include "../strings"
+#include "../screen_client"
+
+namespace wall {
+namespace sg {
+
+class file_chooser: public inlib::sg::base_fch {
+  INLIB_NODE(file_chooser,wall::sg::file_chooser,inlib::sg::base_fch)
+public:
+  virtual bool get_dirs(std::ostream& a_out,const std::string& a_path,std::vector<std::string>& a_dirs){
+    std::string cmd;
+    cmd += s_get_dirs();
+    cmd += "\n";
+    cmd += a_path; //absolute on the master machine.
+
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      a_out << "wall::sg::file_chooser::get_dirs :"
+            << " send_once failed." 
+            << std::endl;
+      return false;
+    }
+
+    std::string slist;
+    if(!m_screen_client.wait_string(slist)) {
+      a_out << "wall::sg::file_chooser::get_dirs :"
+            << " wait_string failed." 
+            << std::endl;
+      return false;
+    }
+
+    inlib::words(slist,"\n",false,a_dirs); //a_dirs are absolute on master.
+
+    return true;
+  }
+  virtual bool get_files(std::ostream& a_out,
+                         const std::string& a_path,
+                         const std::string& a_ext,
+                         std::vector<std::string>& a_paths){
+
+    std::string cmd;
+    cmd += s_get_files();
+    cmd += "\n";
+    cmd += a_ext;
+    cmd += "\n";
+    cmd += a_path; //absolute on master machine.
+
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      a_out << "wall::sg::file_chooser::get_files :"
+            << " send_once failed." 
+            << std::endl;
+      return false;
+    }
+
+    std::string slist;
+    if(!m_screen_client.wait_string(slist)) {
+      a_out << "wall::sg::file_chooser::get_files :"
+            << " wait_string failed." 
+            << std::endl;
+      return false;
+    }
+
+    inlib::words(slist,"\n",false,a_paths); //a_paths absolute on master.
+
+    return true;
+  }
+public:
+  file_chooser(const inlib::sg::base_freetype& a_ttf,screen_client& a_screen_client)
+  :parent(a_ttf),m_screen_client(a_screen_client){}
+  virtual ~file_chooser(){}
+public:
+  file_chooser(const file_chooser& a_from)
+  :inlib::sg::ilist(a_from),parent(a_from),m_screen_client(a_from.m_screen_client){}
+  file_chooser& operator=(const file_chooser& a_from){parent::operator=(a_from);return *this;}
+protected:
+  screen_client& m_screen_client;
+};
+
+}}
+
+#endif

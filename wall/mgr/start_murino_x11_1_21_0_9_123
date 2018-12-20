@@ -1,0 +1,4 @@
+#!/bin/sh -f
+#/usr/local/wall/1.21.0/bin/run -mww 1200 -config lal_9_123
+/usr/local/wall/1.21.0/bin/run -config lal_9_123
+

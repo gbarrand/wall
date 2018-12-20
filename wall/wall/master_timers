@@ -1,0 +1,129 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_master_timers
+#define wall_master_timers
+
+#include "master_screens"
+
+#include <inlib/sys/base_timer>
+#include <inlib/sys/dir>
+#include <inlib/scast>
+#include <inlib/sg/enums>
+#include <inlib/sg/strings>
+#include <inlib/num2s>
+
+class move_timer : public inlib::base_timer {
+public:
+  virtual void action() {
+    if(m_sync_screens.size()) return;
+
+    //m_out << "debug : move_timer::action : start" << std::endl;
+    inlib::wall::event event;
+    event.type = inlib::wall::EVT_USEREVENT;
+    event.user.type = inlib::wall::EVT_USEREVENT;
+    event.user.code = inlib::wall::EVT_USER_UPDATE_KEY_MOTION();
+    inlib::write_buffer<unsigned short>(m_key,(char*)&(event.user.data1));
+    inlib::write_buffer<bool>(m_shift,(char*)&(event.user.data2));
+
+    if(!send_event(m_out,m_screens,event)) {
+      //continue with remaining screens.
+    }
+
+    m_sync_screens = m_screens;
+  }
+public:
+  INLIB_SCLASS(move_timer)
+  virtual void* cast(const std::string& a_class) const {
+    if(void* p = inlib::cmp_cast<move_timer>(this,a_class)) return p;
+    return 0;
+  }
+public:
+  move_timer(std::ostream& a_out,unsigned int a_interval,screens_t& a_screens,screens_t& a_sync_screens)
+  :inlib::base_timer(a_interval)
+  ,m_out(a_out)
+  ,m_screens(a_screens)
+  ,m_sync_screens(a_sync_screens)
+  ,m_key(inlib::sg::key_right)
+  ,m_shift(false)
+  {}
+  virtual ~move_timer(){}
+private:
+  move_timer(const move_timer& a_from)
+  :inlib::base_timer(a_from)
+  ,m_out(a_from.m_out)
+  ,m_screens(a_from.m_screens)
+  ,m_sync_screens(a_from.m_sync_screens)
+  {}
+  move_timer& operator=(const move_timer&){return *this;}
+public:
+  void set_key_shift(inlib::sg::key_move a_key,bool a_shift) {
+    m_key = a_key;
+    m_shift = a_shift;
+  }
+private:
+  std::ostream& m_out;
+  screens_t& m_screens;
+  screens_t& m_sync_screens;
+  inlib::sg::key_move m_key;
+  bool m_shift;
+};
+
+class anims_timer : public inlib::base_timer {
+public:
+  INLIB_SCLASS(anims_timer)
+  virtual void* cast(const std::string& a_class) const {
+    if(void* p = inlib::cmp_cast<anims_timer>(this,a_class)) return p;
+    return 0;
+  }
+public:
+  virtual void action() {
+    if(m_sync_screens.size()) return;
+
+    inlib::wall::event event;
+    event.user.code = inlib::wall::EVT_USER_ANIM();
+    inlib::atime _now = inlib::atime::now();
+    std::string s;
+    if(!inlib::numas<inlib::atime::num_t>(_now.seconds(),s)) {}
+    s += "\n";
+    if(!inlib::numas<inlib::atime::num_t>(_now.micro_seconds(),s)) {}
+    fill_event_with_string(s,event);
+
+    if(!send_event(m_out,m_screens,event)) {
+      //continue with remaining screens.
+    }
+
+    delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+
+    m_sync_screens = m_screens;
+  }
+public:
+  anims_timer(std::ostream& a_out,unsigned int a_interval,
+              screens_t& a_screens,screens_t& a_sync_screens,const std::string& a_doc_dir)
+  :inlib::base_timer(a_interval)
+  ,m_out(a_out)
+  ,m_screens(a_screens)
+  ,m_sync_screens(a_sync_screens)
+  ,m_doc_dir(a_doc_dir)
+  {}
+  virtual ~anims_timer(){}
+private:
+  anims_timer(const anims_timer& a_from)
+  :inlib::base_timer(a_from)
+  ,m_out(a_from.m_out)
+  ,m_screens(a_from.m_screens)
+  ,m_sync_screens(a_from.m_sync_screens)
+  ,m_doc_dir(a_from.m_doc_dir)
+  {}
+  anims_timer& operator=(const anims_timer&){return *this;}
+private:
+  std::ostream& m_out;
+  screens_t& m_screens;
+  screens_t& m_sync_screens;
+  std::string m_doc_dir;
+};
+
+#endif

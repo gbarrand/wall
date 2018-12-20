@@ -1,0 +1,9 @@
+#!/bin/sh -f
+#set -x
+sleep 5
+/bin/rm -f ./MainMenu.nib
+echo "start..."
+ibflags="--errors --warnings --notices"
+ibflags="${ibflags} --output-format human-readable-text"
+ibtool ${ibflags} --compile ./MainMenu.nib ../Cocoa/English.lproj/MainMenu.xib 1> /dev/null 2> /dev/null
+echo "end"

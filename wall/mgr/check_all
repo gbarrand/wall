@@ -1,0 +1,16 @@
+#!/bin/sh -f
+
+find ../wall -name '*' -type f -not -xattr -print > ./tmp_0
+grep -v '.icc' ./tmp_0 > ./tmp_1
+grep 'master_' ./tmp_1 > ./tmp_master
+grep -v 'master_' ./tmp_1 > ./tmp_screen
+
+for item in $(cat tmp_master) ; do  
+  ./build_master_X11 -v -compile_only ${item}
+done
+
+for item in $(cat tmp_screen) ; do  
+  ./build_screen_X11 -v -compile_only ${item}
+done
+
+/bin/rm -f ./tmp_0 ./tmp_1 ./tmp_master ./tmp_screen

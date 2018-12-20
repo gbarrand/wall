@@ -1,0 +1,40 @@
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    echo "No Cocoa on the remote machine."
+    exit
+  fi
+
+  # running one screen client on the Linux pc-panoramix machine.
+
+  cols=1;rows=1
+
+  window_width=1600
+  window_height=1200
+  border_width=0
+  border_height=0
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=800
+
+  screen_hosts[0]=barrand@pc-panoramix.lal.in2p3.fr
+
+  run_screens[0]=${run_cmd}
+
+  rs='1'
+  cs='1'
+
+  win_x[0]=0
+  win_y[0]=0
+
+  monitors[0]=0
+
+  full_screens[0]=1
+
+  x11_displays[0]=:0
+
+  window_no_decorations=1
+
+  # app_dir = <location>/wall/<version>/bin
+  if [ `uname` = Darwin ] ; then
+    version=`dirname ${app_dir}`
+    version=`basename ${version}`
+    screen_bin_dir=/usr/local/wall/${version}/bin
+  fi

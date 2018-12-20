@@ -1,0 +1,30 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_strings
+#define wall_strings
+
+#include <string>
+#include <inlib/S_STRING>
+
+INLIB_GLOBAL_STRING(wall_front_end)
+INLIB_GLOBAL_STRING(warn)
+INLIB_GLOBAL_STRING(message)
+
+INLIB_GLOBAL_STRING(pick_ok)
+INLIB_GLOBAL_STRING(pick_bad)
+INLIB_GLOBAL_STRING(pick_enabled)
+
+// commands :
+
+INLIB_GLOBAL_STRING(data_client_bind)
+INLIB_GLOBAL_STRING(data_client_disconnect)
+INLIB_GLOBAL_STRING(get_files)
+INLIB_GLOBAL_STRING(get_doc_dir)
+INLIB_GLOBAL_STRING(get_dirs)
+INLIB_GLOBAL_STRING(get_data_sub_dirs)
+INLIB_GLOBAL_STRING(get_data_files)
+
+INLIB_GLOBAL_STRING(send_to_clients)
+
+#endif

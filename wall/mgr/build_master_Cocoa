@@ -1,0 +1,57 @@
+#!/bin/sh -f
+
+bush_home=../../bush
+
+. ${bush_home}/args
+. ${bush_home}/app_header
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+#build_distrib=no # we want the wall_master_Cocoa.app
+use_archive=yes
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+if [ `uname` != Darwin ] ; then exit;fi
+
+app=wall_master_Cocoa   # for build_distrib.
+
+app_src=../Cocoa/master.mm
+app_exe=wall_master_Cocoa
+
+cppflags="${cppflags} -DAPP_USE_THREAD"
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+use_inlib=yes
+use_exlib=yes
+
+use_Cocoa=yes
+use_GL=yes
+
+use_jpeg=yes
+use_zlib=yes
+use_thread=yes
+
+. ${bush_home}/use/inlib
+. ${bush_home}/use/exlib
+
+. ${bush_home}/use/Cocoa
+. ${bush_home}/use/GL
+
+. ${bush_home}/use/jpeg
+. ${bush_home}/use/zlib
+. ${bush_home}/use/thread
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+. ${bush_home}/app_trailer
+
+if [ `uname` = Darwin ] ; then
+  /bin/cp -R ${build_path}/distrib/wall_master_Cocoa/${version}/wall_master_Cocoa.app ${build_path}/.
+fi

@@ -1,0 +1,90 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_action_data_client
+#define wall_action_data_client
+
+#include <inlib/sg/gui_viewer>
+
+#include "pos_data"
+
+#include "../screen_client"
+#include "../strings"
+
+namespace wall {
+namespace action {
+
+inline inlib::sg::return_action data_client_disconnect(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  if(!a_data.m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),s_data_client_disconnect())) {
+    a_gv.pop_warn(a_data,"send_once(USER_CMD) failed");
+    return inlib::sg::return_to_render;     
+  }
+
+  a_gv.set_meta_zone_had_been_shown();
+  return inlib::sg::return_to_render;
+}
+
+inline inlib::sg::return_action bind(inlib::sg::gui_viewer& a_gv,inlib::sg::entries& a_widget,const pos_data& a_data) {
+  const std::string& sport = a_widget.values[0];
+
+  unsigned int port;
+  if(!inlib::to<unsigned int>(sport,port)) {
+    a_gv.pop_warn(a_data,"not a uint");
+    return inlib::sg::return_to_render;     
+  }
+  
+  //must have 5 words separated with \n
+  //  <uint:time>\n<string:which timer>\n<string:dir>\n
+  //  <bool:same>\n<string:opts>
+ {std::string cmd;
+  cmd += s_data_client_bind();
+  cmd += "\n";
+  cmd += sport;
+  if(!a_data.m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+    a_gv.pop_warn(a_data,"failed");
+    return inlib::sg::return_to_render;     
+  }}
+
+ {std::string cmd;
+  if(!a_data.m_screen_client.wait_string(cmd)) {
+    a_gv.out() << "data_client::action :"
+               << " wait_string failed." 
+               << std::endl;
+  }
+  std::vector<std::string> words;
+  inlib::words(cmd,"\n",true,words); //accept empty string arg.
+  if(words.size()!=2) {
+    a_gv.pop_warn(a_data,"failed");
+  } else {
+    const std::string& _action = words[0];
+    const std::string& msg = words[1];
+    if(_action==s_warn()) {
+      a_gv.pop_warn(a_data,msg);
+    } else {
+      a_gv.pop_warn(a_data,msg,false);
+    }
+  }}
+
+  a_gv.set_meta_zone_had_been_shown();
+  return inlib::sg::return_to_render;     
+}
+
+inline inlib::sg::return_action bind_data_client(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  inlib::sg::entries* entries = new inlib::sg::entries(a_gv.ttf());
+  entries->label = "bind";
+  a_gv.set_style(*entries);
+
+  entries->labels.add("port");
+  entries->types.add(inlib::sg::entries::entry_uint);
+  entries->values.add("50800");
+  entries->opts.add(std::vector<std::string>());
+
+  inlib::sg::add_callback(a_gv,*entries,bind,a_data);
+
+  a_gv.show_widget(a_data,entries);
+  return inlib::sg::return_to_render;     
+}
+
+}}
+
+#endif

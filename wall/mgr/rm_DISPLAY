@@ -1,0 +1,13 @@
+#!/bin/sh -f
+
+echo "Do not use with procedure."
+exit
+
+/bin/rm -f ./tmp_0
+find /private/tmp -name 'org.x:0' -depth 2 -print > ./tmp_0
+
+for file in $(cat tmp_0) ; do
+  /bin/rm -R -f ${file}
+done
+
+/bin/rm -f ./tmp_0

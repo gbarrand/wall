@@ -1,0 +1,104 @@
+#!/bin/sh -f
+
+bush_home=../../bush
+
+app="`${bush_home}/app_name`"
+version="`${bush_home}/app_vers`"
+
+platform=`uname`
+
+file=${app}-${version}-${platform}.zip
+path=./${file}
+
+if [ `uname -n` = lx2.lal.in2p3.fr ] ; then
+  install_root=/exp/si/barrand/usr/local
+else
+  install_root=/usr/local
+fi
+
+install_path=${install_root}/${app}/${version}
+
+if [ ! -d ${install_root}/${app} ] ; then
+  echo "directory ${install_root}/${app} does not exist."
+  exit
+fi
+
+if [ ! -f ${path} ] ; then
+  echo "file ${path} does not exist."
+  exit
+else
+  echo "install ${path}"
+  echo "under ${install_path}"
+fi
+
+save_dir=`pwd`
+/bin/rm -R -f ${install_path}
+/bin/cp ${path} ${install_root}/${app}/${file}
+cd ${install_root}/${app}
+unzip -q ${file}
+/bin/mv ${app}/${version} .
+/bin/rm -R -f ${app}
+/bin/rm -f ${install_root}/${app}/${file}
+
+cd ${save_dir}
+
+if [ "$1" = "wall" ] ; then
+
+#mac_arts=mac-arts.lal.in2p3.fr
+#mac_pro1=macpro1.lal.in2p3.fr
+#mac_pro2=macpro2.lal.in2p3.fr
+#mac_pro3=macpro3.lal.in2p3.fr
+#mac_pro4=macpro4.lal.in2p3.fr
+
+mac_arts=134.158.76.71
+mac_pro1=134.158.76.186
+mac_pro2=134.158.76.187
+#mac_pro3=134.158.76.188    # mac_pro3 is dead.
+mac_pro4=134.158.76.189
+
+#macs="${mac_pro1} ${mac_pro2} ${mac_pro3} ${mac_pro4}"
+
+macs="${mac_pro1} ${mac_pro2} ${mac_pro4}"
+
+all_macs="${macs} ${mac_arts}"
+
+macs_barrand_ssh()
+{
+  def_cmd="$1"
+  for maci in ${macs} ; do
+    mac=${maci}
+    echo "${mac} > ${def_cmd} ..."
+    ssh barrand@${mac} ${def_cmd}
+  done
+  echo "done"
+}
+
+macs_barrand_scp()
+{
+  def_from=$1
+  def_to=$2
+  for maci in ${macs} ; do
+    mac=${maci}
+    echo "${mac} > scp ${def_from} barrand@${mac}:${def_to} ..."
+    scp ${def_from} barrand@${mac}:${def_to}
+  done
+  echo "done"
+}
+
+  old_macs=${macs}
+  macs=${all_macs}
+
+  # NOTE : we assume what a writable /usr/local/wall directory exists
+  #        under the target machines.
+
+  macs_barrand_ssh "/bin/rm -R -f /usr/local/${app}/${version}"
+  macs_barrand_scp ${path} /usr/local/wall/${file}
+  macs_barrand_ssh "cd /usr/local/wall;unzip -q ${file};/bin/mv ./wall/${version} .;/bin/rm -R -f ./wall"
+  macs_barrand_ssh "/bin/rm -f /usr/local/wall/${file}"
+  macs_barrand_ssh "cd /usr/local/wall/${version}/bin;find . -name '*' -exec chmod go+rx {} \;"
+  macs_barrand_ssh "cd /usr/local/wall/${version}/res;find . -name '*' -exec chmod go+rx {} \;"
+
+  macs=${old_macs}
+
+fi
+

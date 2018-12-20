@@ -1,0 +1,80 @@
+#!/bin/sh -f
+
+do_what=detector
+
+host=134.158.76.71
+
+#host=mac-90103.lal.in2p3.fr
+verbose=false
+timed=false
+
+while test $# -ge 1 ; do
+  case $1 in
+    -events) do_what=events;;
+    -local) host="`uname -n`";;
+    -v) verbose=true;;
+    -timed) timed=true;;
+     *) echo "unknwon option : $1" ; exit ;;
+  esac
+  shift
+done
+
+from="${HOME}/Documents/wall/bsgs"
+
+exe=./file2wall
+
+#//////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////
+if [ ${do_what} = detector ] ; then
+  files=
+  files="${files} ${from}/LHCb_magnet.bsg"
+#  files="${files} ${from}/LHCb_beam_pipe.bsg"
+  params=
+  params="${params} -background='0 0 0'"
+  params="${params} -light_on=true"
+  params="${params} -cam_x='-10000'"
+  params="${params} -cam_y=0"
+  params="${params} -cam_z=9000"
+  params="${params} -cam_orientation='0 1 0 -1.57'"
+  #echo ${params}
+  args=
+  if [ ${verbose} = true ] ; then args="${args} -verbose";fi
+  args="${args} ${params}"
+  args="${args} -host=${host}"
+  args="${args} -clear"
+  args="${args} -radius=10000"
+  args="${args} -placement=static"
+  args="${args} -loop=1"
+  eval ${exe} ${args} ${files}
+  exit
+fi
+
+#//////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////
+
+tmp_file=/tmp/LHCb2wall_tmp_0
+
+files=
+
+find ${from} -name 'LHCb_Sel_Bsmumu*.bsg' -print > ${tmp_file}
+for file in $(cat ${tmp_file}) ; do files="${files} ${file}"; done
+/bin/rm -f ${tmp_file}
+
+find ${from} -name 'LHCb_BsMuMu_*.bsg' -print > ${tmp_file}
+for file in $(cat ${tmp_file}) ; do files="${files} ${file}"; done
+/bin/rm -f ${tmp_file}
+
+find ${from} -name 'LHCb_Bu2JpsiK_*.bsg' -print > ${tmp_file}
+for file in $(cat ${tmp_file}) ; do files="${files} ${file}"; done
+/bin/rm -f ${tmp_file}
+
+args=
+if [ ${verbose} = true ] ; then args="${args} -verbose";fi
+args="${args} -host=${host}"
+args="${args} -placement=dynamic"
+#args="${args} -loop=10"
+if [ ${timed} = true ] ; then args="${args} -sleep=5";fi
+
+eval ${exe} ${args} ${files}

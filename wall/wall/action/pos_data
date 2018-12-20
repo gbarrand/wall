@@ -1,0 +1,42 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_action_pos_data
+#define wall_action_pos_data
+
+#include <inlib/sg/pos_data>
+
+namespace wall {
+class screen_client;
+}
+
+namespace wall {
+namespace action {
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+class pos_data : public inlib::sg::pos_data {
+  typedef inlib::sg::pos_data parent;
+public:
+  pos_data(screen_client& a_screen_client,bool a_popup,int a_ex,int a_ey)
+  :parent(a_popup,a_ex,a_ey)
+  ,m_screen_client(a_screen_client)
+  {}
+  virtual ~pos_data(){}
+public:
+  pos_data(const pos_data& a_from)
+  :parent(a_from)
+  ,m_screen_client(a_from.m_screen_client)
+  {}
+  pos_data& operator=(const pos_data& a_from){
+    parent::operator=(a_from);
+    return *this;
+  }
+public:
+  screen_client& m_screen_client;
+};
+
+}}
+
+#endif

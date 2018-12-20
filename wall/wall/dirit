@@ -1,0 +1,125 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_dirit
+#define wall_dirit
+
+#include "screen_client"
+
+#include <inlib/sg/gui_viewer>
+
+#include <inlib/dir_iterator>
+#include <inlib/wall/strings>
+
+namespace wall {
+
+class dirit : public inlib::dir_iterator {
+  typedef inlib::sg::gui_viewer gv_t;
+public:
+
+  virtual bool open(const std::string& a_dir) {
+    m_files.clear();
+    m_index = 0;
+    
+    std::string dir;
+    dir += inlib::wall::s_dir_diaporama(); 
+    dir += inlib::sep(); 
+    dir += a_dir;
+
+    return m_gv.get_data_sub_dir_files(dir,m_files);
+  }
+
+  virtual bool begin_buffer(size_t& a_sz,char*& a_buffer) {
+
+    if(m_same) {
+
+      if(m_index>=m_files.size()) {
+        a_sz = 0;
+        a_buffer = 0;
+        return false;
+      }
+
+      if(!m_screen_client.send_once(inlib::wall::EVT_USER_GET_FILE(),m_files[m_index])){
+        a_sz = 0;
+        a_buffer = 0;
+        return false;
+      }
+
+      if(!m_screen_client.wait_buffer(a_sz,a_buffer)) {
+        a_sz = 0;
+        a_buffer = 0;
+        return false;
+      }
+
+    } else {
+
+      std::string cmd;
+      cmd += inlib::wall::s_get_per_client_file();
+
+     {std::string files;
+      unsigned int number = m_screen_client.cols()*m_screen_client.rows();
+      for(unsigned int i=0;i<number;i++) {
+        if(i) files += ";";
+        size_t file_index = m_index+i;
+        if(file_index>=m_files.size()) file_index = 0;
+        files += m_files[file_index];
+      }
+      m_index += number;
+      if(m_index>=m_files.size()) m_index = 0;
+      cmd += "\n";
+      cmd += files;}      
+  
+      if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+        a_sz = 0;
+        a_buffer = 0;
+        return false;
+      }
+
+      if(!m_screen_client.wait_buffer(a_sz,a_buffer)) {
+        a_sz = 0;
+        a_buffer = 0;
+        return false;
+      }
+
+    }
+  
+    return true;
+  }
+
+  virtual bool end_buffer(char*& a_buffer) {
+    delete [] a_buffer;
+    a_buffer = 0;
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    return true;
+  }
+public:
+  dirit(std::ostream& a_out,bool a_verbose,gv_t& a_gv,screen_client& a_screen_client,bool a_same)
+  :inlib::dir_iterator(a_out,a_verbose)
+  ,m_gv(a_gv)
+  ,m_screen_client(a_screen_client)
+  ,m_same(a_same)
+  {}
+  virtual ~dirit(){}
+protected:
+  dirit(const dirit& a_from)
+  :inlib::dir_iterator(a_from)
+  ,m_gv(a_from.m_gv)
+  ,m_screen_client(a_from.m_screen_client)
+  ,m_same(a_from.m_same)
+  {}
+  dirit& operator=(const dirit& a_from){
+    inlib::dir_iterator::operator=(a_from);
+    m_same = a_from.m_same;
+    return *this;
+  }
+protected:
+  gv_t& m_gv;
+  screen_client& m_screen_client;
+  bool m_same;
+};
+
+}
+
+#endif

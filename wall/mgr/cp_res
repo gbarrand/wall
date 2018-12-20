@@ -1,0 +1,62 @@
+#!/bin/sh -f
+
+save_dir=`pwd`
+
+ioda_res=${save_dir}/../../ioda/res 
+
+cd ../res
+
+# files copied and renamed :
+/bin/cp ${ioda_res}/ioda.style ./wall.style
+
+#/bin/cp ${ioda_res}/ioda.ftp ./wall.ftp
+
+# wall.scenarios is considered as a data file in wall :
+/bin/cp ${ioda_res}/ioda.scenarios ${HOME}/Documents/wall/wall.scenarios
+
+files=""
+files="${files} arialbd.ttf helveticabd.ttf courbd.ttf lucidagrandebd.ttf" #gui fonts.
+files="${files} helvetica.ttf arial.ttf symbol.ttf"
+files="${files} stixgeneral.otf"
+files="${files} times_roman.ttf"
+
+files="${files} logo_lal_512_1024.jpg"
+
+files="${files} close.jpg edit.jpg edit_undo.jpg"
+#files="${files} clear_event.jpg"
+files="${files} location_ftp.jpg application_exit.jpg"
+files="${files} files.jpg edit_clear.jpg package_edutainment.jpg"
+files="${files} go_home_large.jpg"
+files="${files} turn_around.jpg movie_camera.jpg system_config_boot.jpg"
+files="${files} move2red.jpg crazyeye_run.jpg flip_flop.jpg"
+files="${files} xmas_tree.jpg"
+files="${files} ioda_cube.jpg ioda_atlas.jpg"
+files="${files} set_current_region.jpg edit_plot.jpg"
+files="${files} routing_step.jpg console.jpg tools.jpg"
+files="${files} white.jpg"
+files="${files} object_rotate_left.jpg stop_object_rotate_left.jpg"
+
+files="${files} video_proj.jpg softinex.slides"
+files="${files} zvid.jpg zvid_sphere.jpg oleg_lal.zvid"
+files="${files} BMS.fog SHI.fog T4E.fog T4F.fog EVE1.fog"
+files="${files} wall_atlas.jpg wall_lri.jpg web_g4view.jpg web_ioda.jpg"
+files="${files} aleph.root aleph.vds"
+files="${files} lsst_packs.dot"
+
+files="${files} dcmtk_3_6_0_dicom.dic"
+files="${files} color.dcm"
+
+files="${files} x0bq0102t_d0h.fits"
+files="${files} syncmap.fits"
+files="${files} lhcbvelo.gdml lhcbhcal.gdml"
+
+#files="${files} stop_diaporama.jpg"
+#files="${files} demo.root"
+
+for file in ${files} ; do
+  /bin/cp ${ioda_res}/${file} ./.
+done
+
+find ../../agora/res -name '*.fog' -exec /bin/cp {} . \;
+
+cd ${save_dir}

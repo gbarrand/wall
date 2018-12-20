@@ -1,0 +1,55 @@
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    echo "No Cocoa on the remote machine."
+    exit
+  fi
+
+  # running one screen client on the Linux pc-panoramix machine.
+
+  cols=2;rows=1
+
+  window_width=800
+  window_height=400
+  border_width=0
+  border_height=0
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=800
+
+  screen_hosts[0]=barrand@pc-panoramix.lal.in2p3.fr
+  screen_hosts[1]=barrand@pc-panoramix.lal.in2p3.fr
+
+  run_screens[0]=${run_cmd}
+  run_screens[1]=${run_cmd}
+
+  rs='1'
+  cs='1 2'
+
+  # with X11, on one machine there is one XDisplay for the two screens,
+  # then we can't set full_screen=1. We set explicitly
+  # window_width, window_height to the size of one screen
+  # and adapt window_y per application so that each application
+  # window is at top-left corner of a screen. We ask also
+  # that application windows be not decorated.
+
+  win_x[0]=0
+  win_y[0]=400
+
+  let win_x[1]=${window_width}+${border_width}+${border_width}
+  win_y[1]=400
+
+  monitors[0]=0
+  monitors[1]=0
+
+  full_screens[0]=0
+  full_screens[1]=0
+
+  x11_displays[0]=:0
+  x11_displays[1]=:0
+
+  window_no_decorations=0
+
+  # app_dir = <location>/wall/<version>/bin
+  if [ `uname` = Darwin ] ; then
+    version=`dirname ${app_dir}`
+    version=`basename ${version}`
+    screen_bin_dir=/usr/local/wall/${version}/bin
+  fi

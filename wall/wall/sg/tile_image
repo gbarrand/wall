@@ -1,0 +1,138 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file exlib.license for terms.
+
+#ifndef wall_sg_tile_image
+#define wall_sg_tile_image
+
+// In the case of wall, an tile_image could be visible in one screen
+// but not in others, and then the associated image file in the not
+// visible nodes are not loaded ; we have to take that into account
+// in all related picking actions.
+
+#include <exlib/sg/tile_image>
+#include "../strings"
+#include "../screen_client"
+
+//#define WALL_SG_TILE_IMAGE_MASTER_LOAD_DATA
+
+namespace wall {
+namespace sg {
+
+class tile_image : public exlib::sg::tile_image {
+  INLIB_NODE(tile_image,wall::sg::tile_image,exlib::sg::tile_image)
+public:
+  virtual bool intersect_value(std::ostream& a_out,intersect_type a_type,const inlib::line<inlib::vec3f>& a_line,
+                               std::string& a_s) const {
+    tile_image& self = const_cast<tile_image&>(*this);
+    if(a_type==intersect_down) {
+      self.m_intersect = true;
+      a_s.clear();
+      return true;
+    } else if(a_type==intersect_up) {
+      self.m_intersect = false;
+      a_s.clear();
+      return true;
+    } else //if(a_type==intersect_move)
+    {
+      if(!buffer.size() || !columns.value() || !rows.value() ) {
+        //::printf("debug : tile_image : load_data\n");
+        self.send_to_load();
+        return false;
+      }
+      return parent::intersect_value(a_out,a_type,a_line,a_s);
+    }
+  }
+public:
+  virtual bool load_doc(std::ostream& a_out,const char* a_doc,inlib::uint64 a_ldoc,
+                        unsigned int a_ihdu,unsigned int a_slice){
+    m_sent = false;
+    return parent::load_doc(a_out,a_doc,a_ldoc,a_ihdu,a_slice);
+  }
+protected:
+  virtual void update_sg(std::ostream& a_out,const inlib::sg::matrix_action& a_action) {
+    if(!_is_visible(a_action)) {
+      //::printf("debug : wall::sg::tile_image : not visible %s\n",inlib::base_name(data_file).c_str());
+      if(!m_intersect) buffer.clear();
+      return;
+    }
+    if(buffer.size() && columns.value() && rows.value() ) return; //visible and loaded, done.
+    //::printf("debug : tile_image : load %s\n",inlib::base_name(data_file).c_str());
+#ifdef WALL_SG_TILE_IMAGE_MASTER_LOAD_DATA
+    if(!send_to_load()) {
+      a_out << "wall::sg::tile_image::update_sg : send_to_load() failed." << std::endl;
+    }
+#else
+    if(!load_data(a_out)) {
+      a_out << "wall::sg::tile_image::update_sg : load_data() failed." << std::endl;
+    }
+#endif
+  }
+public:
+  tile_image(bool a_fits_local,
+             const inlib::wget& a_fits_wget,std::string& a_fits_cookie,
+             const std::string& a_fits_host,unsigned int a_fits_port,
+             const std::string& a_fits_dir, //if local.
+             const inlib::wget& a_simbad_wget, //warning : we keep the ref.
+             const inlib::wget& a_stars_wget, //warning : we keep the ref.
+             const std::string& a_stars_host,unsigned int a_stars_port,const std::string& a_stars_dir,
+             inlib::SDSS::catalog& a_stars_catalog,
+             screen_client& a_screen_client,unsigned int a_count)
+  :parent(a_fits_local,a_fits_wget,a_fits_cookie,a_fits_host,a_fits_port,a_fits_dir,
+          a_simbad_wget,
+          a_stars_wget,a_stars_host,a_stars_port,a_stars_dir,a_stars_catalog)
+  ,m_screen_client(a_screen_client)
+  ,m_count(a_count)
+  ,m_intersect(false)
+  ,m_sent(false)
+  {
+    m_pick_bbox_check_image = false; //to handle wall properly.
+  }
+  virtual ~tile_image(){}
+public:
+  tile_image(const tile_image& a_from)
+  :parent(a_from)
+  ,m_screen_client(a_from.m_screen_client)
+  ,m_count(a_from.m_count)
+  ,m_intersect(false) 
+  ,m_sent(false)
+  {}
+  tile_image& operator=(const tile_image& a_from) {
+    parent::operator=(a_from);
+    m_count = a_from.m_count;
+    return *this;
+  }
+protected:
+  bool send_to_load() {
+    if(m_sent) return true; //done.
+    std::string url = "http://";
+    url += m_fits_host;
+    url += ":";
+    inlib::numas<unsigned int>(m_fits_port,url);
+    std::string sep = "/"; //if repserv running on a UNIX.
+    std::string cmd;
+    cmd += inlib::s_get_from_home();
+    cmd += " ";
+    cmd += sep+"Documents"+sep+"repserv"+data_file.value(); //data_file starts with a slash.
+    url += "/cmd="+cmd;
+
+    std::string ss;
+    inlib::numas<unsigned int>(m_screen_client.index(),ss);
+    ss += "\n";
+    inlib::numas<unsigned int>(m_count,ss);
+    ss += "\n";
+    ss += url;
+
+    if(!m_screen_client.send(inlib::wall::EVT_USER_UPDATE_NODE(),ss)) return false;
+    m_sent = true;
+    return true;
+  }
+protected:
+  screen_client& m_screen_client;
+  unsigned int m_count;
+  bool m_intersect;
+  bool m_sent;
+};
+
+}}
+
+#endif

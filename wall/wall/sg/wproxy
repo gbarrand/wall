@@ -1,0 +1,75 @@
+// Copyright (C) 2010, Guloy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_sg_wproxy
+#define wall_sg_wproxy
+
+#include <inlib/net/http>
+#include <inlib/buffer_cache>
+#include <inlib/nomutex>
+
+#include <inlib/astro>
+#include <inlib/num2s>
+#include <inlib/srep>
+
+namespace wall {
+namespace sg {
+
+class wproxy : public inlib::net::wget {
+  typedef inlib::net::wget parent;
+public:
+  virtual bool post(const std::string& a_host,unsigned int a_port,const std::string& a_request,
+                    char*& a_doc,inlib::uint64& a_ldoc,const std::string& a_icookie,std::string& a_ocookie) const {
+    // a_request = "cmd=get_from_home Documents/repserv/<file>"
+
+    wproxy& self = const_cast<wproxy&>(*this);
+
+    char* buffer;
+    inlib::uint64 length;
+    if(m_cache.find(a_request,buffer,length)) {
+      //::printf("debug : wall::sg::wproxy : in cache |%s|\n",a_request.c_str());
+    } else {
+      std::string request = a_request;
+      std::string sold = "cmd="+inlib::s_get_from_home();
+      std::string snew = "cmd="+inlib::s_get_from_home()+" "+a_host+" ";
+      inlib::numas(a_port,snew);
+      inlib::replace(request,sold,snew);
+
+      if(!parent::post(m_proxy_host,m_proxy_port,request,buffer,length,a_icookie,a_ocookie)) return false;
+
+      self.m_cache.add(a_request,buffer,length);
+    }
+    a_doc = new char[length];
+    ::memcpy(a_doc,buffer,length);
+    a_ldoc = length;
+    self.m_cache.check_clear();
+    return true;
+  }
+public:
+  wproxy(std::ostream& a_out,const std::string& a_proxy_host,unsigned int a_proxy_port)
+  :parent(a_out)
+  ,m_proxy_host(a_proxy_host)
+  ,m_proxy_port(a_proxy_port)
+  {}
+  virtual ~wproxy(){}
+public:
+  wproxy(const wproxy& a_from)
+  :parent(a_from)
+  ,m_proxy_host(a_from.m_proxy_host)
+  ,m_proxy_port(a_from.m_proxy_port)
+  {}
+  wproxy& operator=(const wproxy& a_from){
+    parent::operator=(a_from);
+    m_proxy_host = a_from.m_proxy_host;
+    m_proxy_port = a_from.m_proxy_port;
+    return *this;
+  }
+protected:
+  inlib::buffer_cache<inlib::nomutex> m_cache; //m_size=16
+  std::string m_proxy_host;
+  unsigned int m_proxy_port;
+};
+
+}}
+
+#endif

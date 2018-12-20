@@ -1,0 +1,103 @@
+#!/bin/sh -f
+
+#set -v
+
+bush_home="`pwd`/../../bush"
+
+app="`${bush_home}/app_name`"
+version="`${bush_home}/app_vers`"
+
+save_dir=`pwd`
+
+cd ../..
+
+inlib_mgr=./inexlib/inlib/mgr
+inlib_incs=./inlib_incs
+c++ -o ${inlib_incs} -I${inlib_mgr}/.. ${inlib_mgr}/../apps/incs.cpp
+#exit
+
+to=/tmp/${app}
+/bin/rm -R -f /tmp/${app}
+/bin/rm -f /tmp/${app}_source-${version}.zip
+
+/bin/mkdir -p ${to}
+
+#verbose=-verbose
+
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+dirs=./inexlib/inlib:./inexlib/exlib
+
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./${app}/X11/screen.cpp
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./${app}/X11/master.cpp
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./${app}/Cocoa/screen.mm
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./${app}/Cocoa/GLView.mm
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./${app}/Cocoa/master.mm
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./${app}/Windows/screen.cpp
+
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ${bush_home}/cpp/platform.cpp
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ${bush_home}/visual/windef.c
+
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./inexlib/inlib/apps/file2wall.cpp
+${inlib_incs} ${verbose} -pack -dirs=${dirs} -to=${to} ./inexlib/exlib/apps/getserv.cpp
+
+/bin/rm -f ${inlib_incs}
+
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+/bin/mkdir -p ${to}/inexlib/ourex
+
+items=
+items="${items} freetype jpeg png csz expat gl2ps zlib zip"
+items="${items} cfitsio hdf5 graphviz dcmtk wcslib"
+items="${items} CoinGL HEPVis"
+for item in ${items} ; do
+  /bin/cp -R ./inexlib/ourex/${item} ${to}/inexlib/ourex/.
+done
+
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+
+/bin/cp -R ./${app}/mgr ${to}/${app}/.
+/bin/cp -R ./${app}/res ${to}/${app}/.
+
+/bin/cp -R ./${app}/Cocoa ${to}/${app}/.
+
+/bin/cp -R ${bush_home} ${to}/.
+
+/bin/cp ./inexlib/exlib/exlib/yacc/cexpr_lexer.cpp ${to}/inexlib/exlib/exlib/yacc/.
+/bin/cp ./inexlib/exlib/exlib/yacc/cexpr_eval.cpp ${to}/inexlib/exlib/exlib/yacc/.
+/bin/cp ./inexlib/exlib/exlib/yacc/cexpr_tokens ${to}/inexlib/exlib/exlib/yacc/.
+
+/bin/cp ./${app}/${app}.license ${to}/.
+/bin/cp ./${app}/mgr/pack_README ${to}/README
+
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+/bin/rm -R -f ${to}/Users
+
+${bush_home}/find_rm ${to} 'bin_*'
+${bush_home}/find_rm ${to} 'CVS'
+${bush_home}/find_rm ${to} '.git'
+${bush_home}/find_rm ${to} '.DS_Store'
+
+/bin/rm -f ${to}/${app}/mgr/out.log
+/bin/rm -f ${to}/${app}/mgr/inlib_platform
+
+${bush_home}/find_rm ${to}/${app}/mgr '*.zip'
+
+${bush_home}/find_rm ${to}/inexlib '*.so'
+${bush_home}/find_rm ${to}/inexlib '*.bundle'
+
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+#///////////////////////////////////////////////////
+cd ${to}/${app}/mgr
+cd /tmp
+zip -qr ./${app}_source-${version}.zip ${app}
+
+cd ${save_dir}

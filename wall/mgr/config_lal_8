@@ -1,0 +1,150 @@
+mac_arts=134.158.76.71
+mac_pro1=134.158.76.186
+mac_pro2=134.158.76.187
+mac_pro3=134.158.76.188
+mac_pro4=134.158.76.189
+
+  cols=4;rows=2
+
+  window_width=1920
+  window_height=1200
+  #window_height=1199 # if win "no deco" done with "override redirect".
+
+  border_width=88
+  border_height=100
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=1500
+
+  # machines : 1 2 3 4
+  #row = 0 (bottom)
+  screen_hosts[0]=screenwall@${mac_pro1}
+  screen_hosts[1]=screenwall@${mac_pro2}
+  screen_hosts[2]=screenwall@${mac_pro3}
+  screen_hosts[3]=screenwall@${mac_pro4}
+  #row = 1
+  screen_hosts[4]=screenwall@${mac_pro1}
+  screen_hosts[5]=screenwall@${mac_pro2}
+  screen_hosts[6]=screenwall@${mac_pro3}
+  screen_hosts[7]=screenwall@${mac_pro4}
+
+  run_screens[0]=${run_cmd}
+  run_screens[1]=${run_cmd}
+  run_screens[2]=${run_cmd}
+  run_screens[3]=${run_cmd}
+  run_screens[4]=${run_cmd}
+  run_screens[5]=${run_cmd}
+  run_screens[6]=${run_cmd}
+  run_screens[7]=${run_cmd}
+
+  rs='1 2'
+  cs='1 2 3 4'
+
+  # with X11, on one machine there is one XDisplay for the two screens,
+  # then we can't set full_screen=1. We set explicitly
+  # window_width, window_height to the size of one screen
+  # and adapt window_y per application so that each application
+  # window is at top-left corner of a screen. We ask also
+  # that application windows be not decorated.
+
+  win_x[0]=0
+  win_x[1]=0
+  win_x[2]=0
+  win_x[3]=0
+  win_x[4]=0
+  win_x[5]=0
+  win_x[6]=0
+  win_x[7]=0
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    win_y[0]=0
+    win_y[1]=0
+    win_y[2]=0
+    win_y[3]=0
+  else
+    win_y[0]=${window_height}
+    win_y[1]=${window_height}
+    win_y[2]=${window_height}
+    win_y[3]=${window_height}
+  fi
+  win_y[4]=0
+  win_y[5]=0
+  win_y[6]=0
+  win_y[7]=0
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    if [ ${swap_monitor} = "yes" ] ; then
+      monitors[0]=1
+      monitors[1]=1
+      monitors[2]=1
+      monitors[3]=1
+
+      monitors[4]=0
+      monitors[5]=0
+      monitors[6]=0
+      monitors[7]=0
+    else
+      monitors[0]=0
+      monitors[1]=0
+      monitors[2]=0
+      monitors[3]=0
+
+      monitors[4]=1
+      monitors[5]=1
+      monitors[6]=1
+      monitors[7]=1
+    fi
+  else
+    monitors[0]=0
+    monitors[1]=0
+    monitors[2]=0
+    monitors[3]=0
+
+    monitors[4]=0
+    monitors[5]=0
+    monitors[6]=0
+    monitors[7]=0
+  fi
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    full_screens[0]=1
+    full_screens[1]=1
+    full_screens[2]=1
+    full_screens[3]=1
+
+    full_screens[4]=1
+    full_screens[5]=1
+    full_screens[6]=1
+    full_screens[7]=1
+  else
+    full_screens[0]=0
+    full_screens[1]=0
+    full_screens[2]=0
+    full_screens[3]=0
+
+    full_screens[4]=0
+    full_screens[5]=0
+    full_screens[6]=0
+    full_screens[7]=0
+
+    xdisplay_1=`ssh screenwall@${mac_pro1} ${app_dir}/find_DISPLAY`
+    xdisplay_2=`ssh screenwall@${mac_pro2} ${app_dir}/find_DISPLAY`
+    xdisplay_3=`ssh screenwall@${mac_pro3} ${app_dir}/find_DISPLAY`
+    xdisplay_4=`ssh screenwall@${mac_pro4} ${app_dir}/find_DISPLAY`
+
+    echo ${xdisplay_1}
+    echo ${xdisplay_2}
+    echo ${xdisplay_3}
+    echo ${xdisplay_4}
+
+    x11_displays[0]=${xdisplay_1}
+    x11_displays[1]=${xdisplay_2}
+    x11_displays[2]=${xdisplay_3}
+    x11_displays[3]=${xdisplay_4}
+
+    x11_displays[4]=${xdisplay_1}
+    x11_displays[5]=${xdisplay_2}
+    x11_displays[6]=${xdisplay_3}
+    x11_displays[7]=${xdisplay_4}
+
+  fi
+
+  window_no_decorations=1

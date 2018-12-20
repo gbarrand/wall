@@ -1,0 +1,74 @@
+// Copyright (C) 2010, Guloy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_w2master
+#define wall_w2master
+
+#include <inlib/wget>
+
+#include "screen_client"
+
+namespace wall {
+
+class w2master : public virtual inlib::wget {
+public:
+  INLIB_SCLASS(wall::w2master)
+public:
+  virtual bool get(const std::string& a_host,unsigned int a_port,const std::string& a_request,
+                   char*& a_doc,inlib::uint64& a_ldoc,const std::string&,std::string&) const {
+    // for example used by exas/M51.
+    //a_doc should be deleted with delete []
+    //see master_dispatch_EVT_USER_GET_URL()
+    //::printf("debug : wall::w2master::get %s\n",a_request.c_str());
+    std::string url("http://"); //see master_dispatch_EVT_USER_GET_URL()
+    url += a_host;
+    url += ":";
+    inlib::numas<unsigned int>(a_port,url);
+    if(a_request.size()&&(a_request[0]!='/')) url += "/";
+    url += a_request;
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_GET_URL(),url)) {a_doc = 0;a_ldoc = 0;return false;}
+    size_t sz;
+    if(!m_screen_client.wait_buffer(sz,a_doc)) {a_doc = 0;a_ldoc = 0;return false;}
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    a_ldoc = sz;
+    return true;
+  }
+
+  virtual bool post(const std::string& a_host,unsigned int a_port,const std::string& a_request,
+                    char*& a_doc,inlib::uint64& a_ldoc,const std::string&,std::string&) const {
+    // for example used by pyrfits to get params file.
+    //a_doc should be deleted with delete []
+    //see master_dispatch_EVT_USER_POST_URL()
+    //::printf("debug : wall::w2master::get %s\n",a_request.c_str());
+    std::string url("http://"); //see master_dispatch_EVT_USER_GET_URL()
+    url += a_host;
+    url += ":";
+    inlib::numas<unsigned int>(a_port,url);
+    if(a_request.size()&&(a_request[0]!='/')) url += "/";
+    url += a_request;
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_POST_URL(),url)) {a_doc = 0;a_ldoc = 0;return false;}
+    size_t sz;
+    if(!m_screen_client.wait_buffer(sz,a_doc)) {a_doc = 0;a_ldoc = 0;return false;}
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    a_ldoc = sz;
+    return true;
+  }
+public:
+  w2master(screen_client& a_screen_client):m_screen_client(a_screen_client){}
+  virtual ~w2master(){}
+public:
+  w2master(const w2master& a_from):inlib::wget(a_from),m_screen_client(a_from.m_screen_client){}
+  w2master& operator=(const w2master&){return *this;}
+public:
+  wall::screen_client& get_screen_client() const {return m_screen_client;}
+protected:
+  wall::screen_client& m_screen_client;
+};
+
+}
+
+#endif

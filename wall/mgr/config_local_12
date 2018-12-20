@@ -1,0 +1,33 @@
+  cols=1;rows=2
+  window_width=800
+  window_height=400
+  border_width=10
+  border_height=12
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=800
+
+  screen_hosts[0]='not_used'
+  screen_hosts[1]='not_used'
+
+  run_screens[0]="${run_local_cmd}"
+  run_screens[1]="${run_local_cmd}"
+
+  rs='1 2'
+  cs='1'
+
+  win_x[0]=50
+  win_y[0]=550
+
+  win_x[1]=50
+  win_y[1]=100
+
+  monitors[0]=0
+  monitors[1]=0
+
+  full_screens[0]=0
+  full_screens[1]=0
+
+  window_no_decorations=0
+  x11_display=${DISPLAY}
+
+  x11_displays[0]=${x11_display}
+  x11_displays[1]=${x11_display}

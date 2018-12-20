@@ -1,0 +1,135 @@
+#!/bin/sh -f
+
+if [ $# -lt 1 ] ; then
+  echo "give a command [ps_ax, clean, kill, etc...]"
+  exit
+fi
+
+#mac_arts=mac-arts.lal.in2p3.fr
+#mac_pro1=macpro1.lal.in2p3.fr
+#mac_pro2=macpro2.lal.in2p3.fr
+#mac_pro3=macpro3.lal.in2p3.fr
+#mac_pro4=macpro4.lal.in2p3.fr
+
+mac_arts=134.158.76.71
+mac_pro1=134.158.76.186
+mac_pro2=134.158.76.187
+#mac_pro3=134.158.76.188    # mac_pro3 is dead.
+mac_pro4=134.158.76.189
+
+#macs="${mac_pro1} ${mac_pro2} ${mac_pro3} ${mac_pro4}"
+
+macs="${mac_pro1} ${mac_pro2} ${mac_pro4}"
+
+all_macs="${macs} ${mac_arts}"
+
+macs_screenwall_ssh()
+{
+  def_cmd="$1"
+  for maci in ${macs} ; do
+    mac=${maci}
+    echo "${mac} > ${def_cmd} ..."
+    ssh screenwall@${mac} ${def_cmd}
+  done
+}
+
+if [ "$1" = ps_ax ] ; then
+  macs_screenwall_ssh 'ps -ax'
+  exit
+fi
+
+if [ "$1" = ls_tmp ] ; then
+  macs_screenwall_ssh 'ls /tmp'
+  exit
+fi
+
+if [ "$1" = clean_tmp ] ; then
+  macs_screenwall_ssh "find /tmp -name 'inlib*jpg' -exec /bin/rm -f {} \;"
+  macs_screenwall_ssh "find /private/tmp -name 'inlib*jpg' -exec /bin/rm -f {} \;"
+  exit
+fi
+
+if [ "$1" = kill ] ; then
+  if [ "$2" = "" ] ; then
+    echo 'give part of a proc name.'
+  else
+    # NOTE : kill must be done by using the screenwall account.
+    for maci in ${macs} ; do
+      mac=${maci}
+      ssh screenwall@${mac} ./kill_proc $2
+    done
+  fi
+  exit
+fi
+
+if [ "$1" = kill_some ] ; then
+  # NOTE : kill must be done by using the screenwall account.
+  for maci in ${macs} ; do
+    mac=${maci}
+    ssh screenwall@${mac} ./kill_proc wall_
+    ssh screenwall@${mac} ./kill_proc xclock
+    ssh screenwall@${mac} ./kill_proc xterm
+    ssh screenwall@${mac} '/bin/rm -f /tmp/inlib*'
+    ssh screenwall@${mac} '/bin/rm -f /tmp/wall_screen*'
+  done
+  exit
+fi
+
+if [ "$1" = clean ] ; then
+  for maci in ${macs} ; do
+    mac=${maci}
+    ssh screenwall@${mac} '/bin/rm -f /tmp/inlib*'
+    ssh screenwall@${mac} '/bin/rm -R -f /tmp/wall_screen*'
+  done
+  exit
+fi
+
+if [ "$1" = open_X11 ] ; then
+  if [ `uname` = Darwin ] ; then
+    macs_screenwall_ssh 'open /Applications/Utilities/X11.app'
+    # XQuartz does not work on macpro1
+    #  macs_screenwall_ssh 'open /Applications/Utilities/XQuartz.app'
+  fi
+  exit
+fi
+
+if [ "$1" = kill_X11 ] ; then
+  if [ `uname` = Darwin ] ; then
+    # NOTE : kill must be done by using the screenwall account.
+    macs_screenwall_ssh './kill_proc X11.bin'
+  fi
+  exit
+fi
+
+if [ "$1" = find_DISPLAY ] ; then
+  if [ `uname` = Darwin ] ; then
+    macs_screenwall_ssh /Applications/wall/1.8/bin/find_DISPLAY
+  else
+    echo 'not available on this platform.'
+  fi
+  exit
+fi
+
+if [ "$1" = open_google_earth ] ; then
+  if [ `uname` = Darwin ] ; then
+    macs_screenwall_ssh "open '/Applications/Google Earth.app'"
+  else
+    echo 'not available on this platform.'
+  fi
+  exit
+fi
+
+if [ "$1" = kill_google_earth ] ; then
+  macs_screenwall_ssh './kill_proc Earth'
+  exit
+fi
+
+if [ "$1" = xclock ] ; then
+  cmd='export DISPLAY=:0;/usr/X11R6/bin/xclock &'
+  macs_screenwall_ssh "${cmd}"
+  exit
+fi
+
+echo "unknown command $1"
+
+macs_screenwall_ssh "$1"

@@ -1,0 +1,13 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_wall_version
+#define wall_wall_version
+
+#define WALL_MAJOR_VERSION 1
+#define WALL_MINOR_VERSION 23
+#define WALL_PATCH_VERSION 0
+#define WALL_VERSION       "1.23.0"
+#define WALL_VERSION_VRP   "v1r23p0"
+
+#endif

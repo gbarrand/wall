@@ -1,0 +1,42 @@
+
+  cols=2;rows=1 # default
+
+  # have same overall aspect ration than LAL murino (for .slides) :
+  window_width=600
+  window_height=600
+  border_width=10
+  border_height=12
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=600
+
+  screen_hosts[0]='not_used'
+  screen_hosts[1]='not_used'
+
+  run_screens[0]=${run_local_cmd}
+
+  if [ "${run_debug}" = "yes" ] ; then
+    run_screens[1]=${run_cmd_dbg}
+  else
+    run_screens[1]=${run_local_cmd}
+  fi
+
+  rs='1'
+  cs='1 2'
+
+  win_x[0]=0
+  win_y[0]=400
+
+  let win_x[1]=${window_width}+${border_width}+${border_width}
+  win_y[1]=400
+
+  monitors[0]=0
+  monitors[1]=0
+
+  full_screens[0]=0
+  full_screens[1]=0
+
+  window_no_decorations=0
+
+  x11_display=${DISPLAY}
+  x11_displays[0]=${x11_display}
+  x11_displays[1]=${x11_display}
+

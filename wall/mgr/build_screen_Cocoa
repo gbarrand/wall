@@ -1,0 +1,108 @@
+#!/bin/sh -f
+
+bush_home=../../bush
+
+build_has_iv=no
+
+build_args=
+while test $# -ge 1 ; do
+  case $1 in
+    -iv) build_has_iv=yes;;
+     *) build_args="${build_args} $1";;  
+  esac
+  shift
+done
+
+. ${bush_home}/exlib_header
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+build_distrib=no
+use_archive=yes #not set by exlib_header
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+if [ `uname` != Darwin ] ; then exit;fi
+
+mmfiles="${mmfiles} ../Cocoa/GLView.mm"
+app_src=../Cocoa/screen.mm
+app_exe=wall_screen_Cocoa
+
+cppflags="${cppflags} -DAPP_USE_DCMTK"
+
+if [ ${build_has_iv} = "yes" ] ; then
+  cppflags="${cppflags} -DAPP_USE_IV"
+  cppfiles="${cppfiles} ${exlib_home}/exlib/iv/so_2sg_action.cpp"
+fi
+
+cppflags="${cppflags} -DAPP_USE_THREAD"
+
+# exlib/yacc/cexpr_eval, for edep/rgdml :
+cppflags="${cppflags} -DAPP_USE_EDEP"
+cppfiles="${cppfiles} ${exlib_home}/exlib/yacc/cexpr_lexer.cpp"
+cppfiles="${cppfiles} ${exlib_home}/exlib/yacc/cexpr_eval.cpp"
+
+cppflags="${cppflags} -DINLIB_USE_CSZ"
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+use_inlib=yes
+use_exlib=yes
+
+use_Cocoa=yes
+
+use_GL=yes
+use_zlib=yes
+use_zip=yes
+use_csz=yes
+use_png=yes
+use_expat=yes
+use_freetype=yes
+use_jpeg=yes
+use_cfitsio=yes
+use_wcslib=yes
+use_hdf5=yes
+use_graphviz=yes
+use_dcmtk=yes
+use_thread=yes
+
+. ${bush_home}/use/inlib
+. ${bush_home}/use/exlib
+
+. ${bush_home}/use/Cocoa
+
+if [ ${build_has_iv} = "yes" ] ; then
+  use_HEPVis=yes
+  . ${bush_home}/use/HEPVis
+  use_CoinGL=yes
+  . ${bush_home}/use/CoinGL
+fi
+
+. ${bush_home}/use/GL
+
+. ${bush_home}/use/csz
+. ${bush_home}/use/jpeg
+. ${bush_home}/use/freetype
+. ${bush_home}/use/expat
+. ${bush_home}/use/cfitsio
+. ${bush_home}/use/wcslib
+. ${bush_home}/use/hdf5
+. ${bush_home}/use/png
+. ${bush_home}/use/zip
+. ${bush_home}/use/zlib
+
+. ${bush_home}/use/graphviz
+. ${bush_home}/use/dcmtk
+. ${bush_home}/use/thread
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+. ${bush_home}/application

@@ -1,0 +1,59 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_app_args
+#define wall_app_args
+
+#include <inlib/mparam>
+
+inline bool app_args(
+ std::ostream&
+,bool a_from_env
+,const std::string& a_env_prefix
+,const inlib::args& a_args
+,bool& a_verbose
+,unsigned int& a_monitor
+,bool& a_full_screen
+,int& a_window_x
+,int& a_window_y
+,unsigned int& a_window_width
+,unsigned int& a_window_height
+,unsigned int& a_menu_col
+,unsigned int& a_menu_row
+,bool& a_window_no_decorations
+){
+  inlib::mparam_bool(a_from_env,a_args,a_env_prefix,
+                     "verbose",false,a_verbose);
+
+  inlib::mparam<unsigned int>(a_from_env,a_args,a_env_prefix,
+                              "monitor",0,a_monitor);
+
+  inlib::mparam_bool(a_from_env,a_args,a_env_prefix,
+                     "full_screen",false,a_full_screen);
+  inlib::mparam_bool(a_from_env,a_args,a_env_prefix,
+                     "window_no_decorations",false,a_window_no_decorations);
+
+  //if not full screen :
+  inlib::mparam<int>(a_from_env,a_args,a_env_prefix,
+                          "window_x",0,a_window_x);
+
+  inlib::mparam<int>(a_from_env,a_args,a_env_prefix,
+                          "window_y",0,a_window_y);
+
+  inlib::mparam<unsigned int>(a_from_env,a_args,a_env_prefix,
+                          "window_width",800,a_window_width);
+
+  inlib::mparam<unsigned int>(a_from_env,a_args,a_env_prefix,
+                          "window_height",400,a_window_height);
+
+  inlib::mparam<unsigned int>(a_from_env,a_args,a_env_prefix,
+                          "menu_col",0,a_menu_col);
+  inlib::mparam<unsigned int>(a_from_env,a_args,a_env_prefix,
+                          "menu_row",0,a_menu_row);
+
+  return true;
+}
+
+#endif
+
+

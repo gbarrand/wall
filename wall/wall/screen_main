@@ -1,0 +1,909 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_screen_main
+#define wall_screen_main
+
+#define APP_USE_GRAPHVIZ
+
+//#define APP_USE_IV decided from the build script.
+
+#include "app_args"
+#include "screen_dispatch"
+#include "screen_cache"
+#include "version"
+#include "view_astro"
+
+#include "background_popup"
+#include "sg/selection"
+
+//#include "cbk/diaporama"
+#include "action/data_client"
+#include "action/model"
+
+#include <exlib/xml/xml_style>
+#include <inlib/sg/gui_viewer>
+
+#include <inlib/cbk/image_popup>
+#include <inlib/cbk/plots_popup>
+#include <inlib/cbk/healpix_popup>
+#include <inlib/cbk/cfitsio_popup>
+
+#include <inlib/sg/opener>
+
+//Linux : put png first so that png.h comes before any setjmp.h
+#include <exlib/png_opener>
+
+#include <exlib/rroot/opener>
+#include <exlib/jpeg_opener>
+#include <exlib/cfitsio_opener>
+#include <exlib/hdf5/opener>
+#include <exlib/povama/opener>
+//#include <exlib/csv_opener>
+
+#ifdef APP_USE_DCMTK
+#include <exlib/dcmtk/opener>
+#endif
+
+#ifdef APP_USE_IV
+#include <exlib/iv/opener>
+#endif
+
+#include <exlib/scenarios_opener>
+#include <exlib/slides_opener>
+#include <exlib/zvid_opener>
+#include <exlib/aida_opener>
+#include <exlib/edep/opener>
+#include <exlib/bsg_opener>
+#include <exlib/exsg_opener>
+
+#ifdef APP_USE_GRAPHVIZ
+#define boolean gv_boolean //clash with jpeg about typedef boolean
+#include <exlib/graphviz/opener>
+#endif
+
+#include <exlib/sg/rbsg_factories>
+#include <inlib/sg/rbsg_factories>
+
+#include <exlib/xml/xml_srv>
+
+#include <inlib/sys/dir>
+#include <inlib/fcache>
+
+#ifdef _MSC_VER
+// disable the warning about the usage of "this" in the constructor.
+#pragma warning(disable:4355)
+#endif
+
+namespace wall {
+namespace common {
+
+class main
+:public sg::selection //template node. Before the below gui_viewer.
+,public inlib::sg::gui_viewer 
+,public inlib::sg::view_evd 
+,public view_astro //for exas/M51
+{
+  typedef inlib::sg::gui_viewer parent;
+  typedef inlib::sg::view_evd parent_evd;
+  typedef view_astro parent_astro;
+public:
+  virtual void render() = 0; //needed for screen/Cocoa program.
+public:
+  INLIB_SCLASS(wall::common::main)
+  virtual void* cast(const std::string& a_class) const {
+    if(void* p = inlib::cmp_cast<main>(this,a_class)) return p;
+    if(void* p = inlib::cmp_cast<parent_evd>(this,a_class)) return p;
+    if(void* p = inlib::cmp_cast<inlib::sg::view_astro>(this,a_class)) return p;
+//    if(void* p = inlib::cmp_cast<parent_astro>(this,a_class)) return p;
+    return parent::cast(a_class);
+  }
+protected:
+  virtual inlib::sg::node* create_main_menu() {
+    inlib::sg::list* list = new inlib::sg::list(ttf());
+    set_style(*list);
+
+    action::pos_data data(m_screen_client,false,0,0);
+    inlib::sg::add_image_item(*this,*list,"open...","files.jpg",action::files,data);
+
+  //inlib::sg::add_image_item(*this,*list,"diaporama","sidebar_photos.jpg",cbk::action_diaporama,data);
+
+  //inlib::sg::add_image_item(*this,*list,"empty scene","white.jpg",inlib::sg::action_empty_scene_3D);
+    inlib::sg::add_image_item(*this,*list,"examples","package_edutainment.jpg",action::exas,data);
+
+    inlib::sg::add_image_item(*this,*list,"reset","edit_undo.jpg",inlib::sg::action_reset_camera);
+
+    inlib::sg::add_image_item(*this,*list,"clear static scene","edit_clear.jpg",inlib::sg::action_clear_static_sg);
+    inlib::sg::add_image_item(*this,*list,"clear dynamic scene","clear_event.jpg",inlib::sg::action_clear_dynamic_sg);
+    inlib::sg::add_image_item(*this,*list,"clear screen scene","white.jpg",inlib::sg::action_clear_screen_sg,data);
+
+    inlib::sg::add_image_item(*this,*list,"set menu screen","set_menu_screen.jpg",
+                              action::menu_screen_choose,action::menu_screen_data(m_screen_client,m_menu_col,m_menu_row,false,0,0));
+
+#ifdef APP_USE_THREAD
+#else
+    inlib::sg::add_item(*this,*list,"wait a data client",action::bind_data_client,data);
+#endif
+    inlib::sg::add_image_item(*this,*list,"disconnect data client","stop_data_client.jpg",action::data_client_disconnect,data);
+
+    inlib::sg::add_image_item(*this,*list,"utils","tools.jpg",inlib::sg::action_utils);
+
+   {std::vector<std::string> about;
+    about.push_back("Version : "+std::string(WALL_VERSION));
+    about.push_back("Author : Guy Barrand");
+    inlib::sg::add_image_item(*this,*list,"about","icon.jpg",inlib::sg::action_about,about);}
+
+/*
+    list->add("set console",new exlib::cbk::console(*this));
+    list->add("Quiz Fr",new exlib::cbk::console(*this,exlib::cbk::console::action_which_det_fr()));
+    list->add("Quiz En",new exlib::cbk::console(*this,exlib::cbk::console::action_which_det_en()));
+*/
+
+    return list;
+  }
+
+  virtual void create_camenu_items(unsigned int a_nb,float a_wcw,float a_wch,float a_wb,float a_hb) {
+    parent::create_camenu_items(a_nb,a_wcw,a_wch,a_wb,a_hb);
+
+    create_main_button(m_out,m_res_dir,parent::m_params,
+                       m_camenu_sep,a_wcw,a_wch,a_wb,a_hb,0,
+                       0,3,"-","-","",
+                       new inlib::sg::gv_cbk(*this,action::dec_modeling_scale));
+    create_main_button(m_out,m_res_dir,parent::m_params,
+                       m_camenu_sep,a_wcw,a_wch,a_wb,a_hb,0,
+                       1,3,"+","+","",
+                       new inlib::sg::gv_cbk(*this,action::inc_modeling_scale));
+  }
+
+  ///////////////////////////////////////////////////
+  /// virtual for wall/screen_main : ////////////////
+  ///////////////////////////////////////////////////
+  virtual bool is_wall_screen_app() {return true;}
+
+  virtual inlib::sg::selection* create_selection() const {return new sg::selection(m_screen_client);}
+
+  virtual inlib::sg::base_camera* create_camera(inlib::sg::camera_type a_type,float a_near_height,float a_near) {
+    if(m_params.m_cam_tiled) {
+      inlib::sg::base_camera* camera = _create_camera(a_type,a_near_height);
+      camera->znear = a_near;
+      return camera;
+    } else {
+      return parent::create_camera(a_type,a_near_height,a_near);
+    }    
+  }
+
+
+  virtual void get_gui_wcw_wch(float& a_wcw,float& a_wch,float& a_tx,float& a_ty,float& a_aspect) const {
+    get_screen_wcw_wch(gui_camera_height(),
+                       m_menu_col,m_menu_row,
+                       a_wcw,a_wch,a_tx,a_ty,
+                       a_aspect);
+  }
+ 
+  virtual void get_screens(unsigned int& a_cols,unsigned int& a_rows){
+    a_cols = m_screen_client.m_cols;
+    a_rows = m_screen_client.m_rows;
+  }
+
+  virtual void get_screen_wcw_wch(float a_cam_height,
+                                  unsigned int a_col,unsigned int a_row,
+                                  float& a_wcw,float& a_wch,
+                                  float& a_tx,float& a_ty,
+                                  float& a_aspect) const {
+    //camera is mapped to "all pixels but inside external borders".
+
+    //in the below rm external borders.
+    unsigned int inside_ww = m_screen_client.m_all_ww-2*m_screen_client.m_bw;
+    unsigned int inside_wh = m_screen_client.m_all_wh-2*m_screen_client.m_bh;
+
+    float aspect = float(inside_ww)/float(inside_wh);
+    float cam_width = a_cam_height*aspect;
+    float wcw = cam_width;
+    float wch = a_cam_height;
+
+    //border in world coordinates :
+    float wbw = float(m_screen_client.m_bw)*wcw/float(inside_ww);
+    float wbh = float(m_screen_client.m_bh)*wch/float(inside_wh);
+
+    float all_wcw = wcw+2*wbw;
+    float all_wch = wch+2*wbh;
+    float one_wbw = all_wcw/float(m_screen_client.m_cols);
+    float one_wbh = all_wch/float(m_screen_client.m_rows);
+
+    unsigned int col = a_col>=m_screen_client.m_cols?m_screen_client.m_cols-1:a_col;
+    unsigned int row = a_row>=m_screen_client.m_rows?m_screen_client.m_rows-1:a_row;
+
+    // get (blx,bly) bottom-left wc corner of local (col,row) screen.
+    // same logic as client.cvt_local_to_all() but done in wc.
+    float left = col * one_wbw;
+    float bottom = row * one_wbh;
+    float blx = 0 + (left + wbw);
+    float bly = 0 + (bottom + wbh);
+    // one screen visible world coordinate part (then without borders).
+    float one_wcw = wcw*float(m_ww)/float(inside_ww);
+    float one_wch = wch*float(m_wh)/float(inside_wh);
+    // center of (col,row) screen in wc :
+    a_tx = -all_wcw*0.5f+blx+one_wcw*0.5f;
+    a_ty = -all_wch*0.5f+bly+one_wch*0.5f;
+
+    //map the gui scene into one screen "with all borders but inside border" :
+    a_wch = one_wch;
+    a_wcw = one_wcw;
+    a_aspect = aspect;
+  }
+
+  virtual void get_gui_all_wcw_wch(float& a_wcw,float& a_wch) const {
+    //camera is mapped to "all pixels but inside external borders".
+
+    //in the below rm external borders.
+    unsigned int inside_ww = m_screen_client.m_all_ww-2*m_screen_client.m_bw;
+    unsigned int inside_wh = m_screen_client.m_all_wh-2*m_screen_client.m_bh;
+
+    float cam_height = gui_camera_height();
+
+    float aspect = float(inside_ww)/float(inside_wh);
+    float cam_width = cam_height*aspect;
+
+    a_wcw = cam_width;
+    a_wch = cam_height;
+  }
+
+  virtual void get_inside_pixels(unsigned int& a_w,unsigned int& a_h) const {
+    //in the below rm external borders.
+    a_w = m_screen_client.m_all_ww-2*m_screen_client.m_bw;
+    a_h = m_screen_client.m_all_wh-2*m_screen_client.m_bh;
+  }
+
+  virtual void screen_to_gui(int a_ix,int a_iy,float& a_x,float& a_y) const {
+    // camera is mapped to "all pixels but inside external borders".
+
+    float cam_height = gui_camera_height();
+
+    unsigned int inside_ww = m_screen_client.m_all_ww-2*m_screen_client.m_bw;
+    unsigned int inside_wh = m_screen_client.m_all_wh-2*m_screen_client.m_bh;
+
+    float aspect = float(inside_ww)/float(inside_wh);
+    float cam_width = cam_height*aspect;
+    float wcw = cam_width;
+    float wch = cam_height;
+
+    float wbw = float(m_screen_client.m_bw)*wcw/float(inside_ww);
+    float wbh = float(m_screen_client.m_bh)*wch/float(inside_wh);
+
+    float all_wcw = wcw+2*wbw;
+    float all_wch = wch+2*wbh;
+
+    // the (a_ix,a_iy) is in "local screen coords without border".
+    // Convert to "absolute wall coords" :
+    m_screen_client.cvt_local_to_all(a_ix,a_iy);
+
+    // go to the (a_ix,a_iy) in gui wc :
+    a_x = -all_wcw*0.5f+float(a_ix)*all_wcw/float(m_screen_client.m_all_ww);
+    a_y = -all_wch*0.5f+float(a_iy)*all_wch/float(m_screen_client.m_all_wh);
+  }
+ 
+/*
+  virtual void screen_to_col_row(int a_ix,int a_iy,unsigned int& a_col,unsigned int& a_row) {
+    // (a_ix,a_iy) is in "local screen coords without border".
+    // Convert to "absolute wall coords" :
+    m_screen_client.cvt_local_to_all(a_ix,a_iy);
+    // then to col, row :
+    m_screen_client.cvt_all_to_col_row(a_ix,a_iy,a_col,a_row);
+  }
+*/
+
+  virtual void toggle_camera_menu_at_pos(int a_ix,int a_iy) {
+    m_screen_client.cvt_local_to_all(a_ix,a_iy);
+    unsigned int col,row;
+    m_screen_client.cvt_all_to_col_row(a_ix,a_iy,col,row);
+    if((col!=m_menu_col)||(row!=m_menu_row)) {
+      hide_popup();
+      m_menu_col = col;
+      m_menu_row = row;
+      ask_to_rebuild_gui();
+      if(!camenu_visible()) show_camera_menu();
+    } else {
+      toggle_camera_menu();
+    }
+  }
+
+  virtual bool get_data_sub_dirs(const std::string& a_path_from_first_data_dir,std::vector<std::string>& a_dirs){
+    std::string cmd;
+    cmd += s_get_data_sub_dirs();
+    cmd += "\n";
+    cmd += a_path_from_first_data_dir;
+
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      m_out << "wall::common::main::get_data_sub_dirs :"
+                 << " send_once failed." 
+                 << std::endl;
+      a_dirs.clear();
+      return false;
+    }
+
+    std::string slist;
+    if(!m_screen_client.wait_string(slist)) {
+      m_out << "wall::common::main::get_data_sub_dirs :"
+                 << " wait_string failed." 
+                 << std::endl;
+      a_dirs.clear();
+      return false;
+    }
+
+    inlib::words(slist,"\n",false,a_dirs);
+    return true;
+  }
+
+  virtual bool get_data_files(std::vector<std::string>& a_files){
+    std::string cmd;
+    cmd += s_get_data_files();
+
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      m_out << "wall::common::main::get_data_files :"
+                 << " send_once failed." 
+                 << std::endl;
+      a_files.clear();
+      return false;
+    }
+
+    std::string slist;
+    if(!m_screen_client.wait_string(slist)) {
+      m_out << "wall::common::main::get_data_files :"
+                 << " wait_string failed." 
+                 << std::endl;
+      a_files.clear();
+      return false;
+    }
+
+    inlib::words(slist,"\n",false,a_files);
+    return true;
+  }
+
+  virtual bool get_data_sub_dir_files(const std::string& a_path_from_first_data_dir,std::vector<std::string>& a_files){
+    std::string cmd = s_get_doc_dir();
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      m_out << "wall::common::main::get_data_sub_dir_files :"
+                    << " send_once failed." 
+                    << std::endl;
+      a_files.clear();
+      return false;
+    }
+    std::string doc_dir; //absolute on the master machine.
+    if(!m_screen_client.wait_string(doc_dir)) {
+      m_out << "wall::common::main::get_data_sub_dir_files :"
+                    << " wait_string failed." 
+                    << std::endl;
+      a_files.clear();
+      return false;
+    }
+
+    std::string dir = doc_dir;
+    dir += inlib::sep(); 
+    dir += a_path_from_first_data_dir;
+
+    cmd.clear();
+    cmd += s_get_files();
+    cmd += "\n";
+    cmd += "*";
+    cmd += "\n";
+    cmd += dir; //absolute on master machine.
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      m_out << "wall::common::main::get_data_sub_dir_files :"
+                    << " send_once failed." 
+                    << std::endl;
+      a_files.clear();
+      return false;
+    }
+    std::string slist;
+    if(!m_screen_client.wait_string(slist)) {
+      m_out << "wall::common::main::get_data_sub_dir_files :"
+                    << " wait_string failed." 
+                    << std::endl;
+      a_files.clear();
+      return false;
+    }
+    inlib::words(slist,"\n",false,a_files);
+    return true;
+  }
+
+  ////////////////////////////////////
+  ////////////////////////////////////
+  ////////////////////////////////////
+  virtual bool get_time_now(inlib::atime& a_v) const {
+    std::string cmd;
+    cmd += inlib::wall::s_get_time_now();
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {
+      m_out << "wall::common::main::get_time_now :"
+                    << " send_once failed." 
+                    << std::endl;
+      a_v = inlib::atime(0,0);
+      return false;
+    }
+
+    std::string s;
+    if(!m_screen_client.wait_string(s)) {
+      m_out << "wall::common::main::get_time_now :"
+                    << " wait_string failed." 
+                    << std::endl;
+      a_v = inlib::atime(0,0);
+      return false;
+    }
+    std::vector<std::string> ws;
+    inlib::words(s,"\n",false,ws);
+    if(ws.size()!=2) {
+      m_out << "wall::common::main::get_time_now :"
+                    << " received bad number of words." 
+                    << std::endl;
+      a_v = inlib::atime(0,0);
+      return false;
+    }
+    inlib::atime::num_t secs;
+    if(!inlib::to(ws[0],secs)) {
+      m_out << "wall::common::main::get_time_now :"
+                    << " can't convert " << ws[0] << " to an uint64."
+                    << std::endl;
+      a_v = inlib::atime(0,0);
+      return false;
+    }
+    inlib::atime::num_t micro_secs;
+    if(!inlib::to(ws[1],micro_secs)) {
+      m_out << "wall::common::main::get_time_now :"
+                    << " can't convert " << ws[1] << " to an uint64."
+                    << std::endl;
+      a_v = inlib::atime(0,0);
+      return false;
+    }
+    a_v = inlib::atime(secs,micro_secs);
+    return true;
+  }
+
+/*
+  virtual bool treat_anim(const inlib::atime& a_t) {
+    if(parent::treat_anim(a_t)) return true;
+    return false;
+  }
+*/
+
+  virtual void enable_anim() {
+    std::string msg;
+    msg += inlib::wall::s_timer_start();
+    msg += "\n";
+    msg += "40"; //millisecs
+  //msg += "50"; //millisecs
+    msg += "\n";
+    msg += inlib::wall::s_anims();
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),msg)) {}
+    m_camenu_disable_anim_image_button.color = inlib::colorf_pink();
+  }
+
+  virtual void disable_anim() {
+    std::string cmd;
+    cmd += inlib::wall::s_timer_stop();
+    cmd += "\n";
+    cmd += inlib::wall::s_anims();
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),cmd)) {}
+    m_camenu_disable_anim_image_button.color = inlib::colorf_white();
+  }
+
+  ////////////////////////////////////
+  ////////////////////////////////////
+  ////////////////////////////////////
+  virtual void ask_to_sync_clients() {
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_START_SYNC())) {}
+  }
+
+  virtual void wait_sync_client() {
+    if(!m_screen_client.send(inlib::wall::EVT_USER_SYNC_SCREEN())) {}
+    std::string _s;
+    if(!m_screen_client.wait_string(_s)) {}
+  }
+
+  virtual void clear_caches() {
+    parent::clear_caches();
+    m_screen_cache.clear();
+  }
+
+  ////////////////////////////////////
+  /// camedit panel : ////////////////
+  ////////////////////////////////////
+  virtual bool swap_scene_camera_kind(){
+    if(!m_scene_camera) return false;
+
+    inlib::sg::base_camera* new_cam = 0;
+
+    if(inlib::sg::frustum* pc =
+      inlib::safe_cast<inlib::sg::node,inlib::sg::frustum>(*m_scene_camera)){
+      //have to find correct values for an lrbt corners.
+
+      inlib::sg::lrbt* new_oc = new inlib::sg::lrbt;
+
+      // pc corners are in the near plane.
+      // We project them in the focal plane.
+          
+      if(!m_scene_camera->znear.value()) {
+        m_out << "wall::common::main::swap_scene_camera_kind :"
+                      << " null zear."
+                      << std::endl;
+        return false;     
+      }
+      float fac = m_scene_camera->focal.value()/m_scene_camera->znear.value();
+
+      new_oc->left   = pc->left.value()*fac;
+      new_oc->right  = pc->right.value()*fac;
+      new_oc->bottom = pc->bottom.value()*fac;
+      new_oc->top    = pc->top.value()*fac;
+
+      new_cam = new_oc;
+
+    } else if(inlib::sg::lrbt* oc =
+      inlib::safe_cast<inlib::sg::node,inlib::sg::lrbt>(*m_scene_camera)) {
+
+      //have to find correct values for a frustrum corners.
+
+      inlib::sg::frustum* new_pc = new inlib::sg::frustum;
+
+      // We assume oc corners "at focal".
+      // We project them in the near plane.
+          
+      if(!m_scene_camera->focal.value()) {
+        m_out << "wall::common::main::swap_scene_camera_kind :"
+                      << " null focal."
+                      << std::endl;
+        return false;     
+      }
+      float fac = m_scene_camera->znear.value()/m_scene_camera->focal.value();
+
+      new_pc->left   = oc->left.value()*fac;
+      new_pc->right  = oc->right.value()*fac;
+      new_pc->bottom = oc->bottom.value()*fac;
+      new_pc->top    = oc->top.value()*fac;
+
+      new_cam = new_pc;
+
+    } else {
+      //m_gv.map_warn("camera not ortho and not perspective.");
+      //return inlib::sg::return_to_render;     
+      m_out << "wall::common::main::swap_scene_camera_kind :"
+                    << " camera not ortho and not perspective."
+                    << std::endl;
+      return false;
+    }
+
+    new_cam->znear = m_scene_camera->znear;
+    new_cam->zfar = m_scene_camera->zfar;
+    new_cam->position = m_scene_camera->position;
+    new_cam->orientation = m_scene_camera->orientation;
+    new_cam->dx = m_scene_camera->dx;
+    new_cam->da = m_scene_camera->da;
+    new_cam->ds = m_scene_camera->ds;
+    new_cam->focal = m_scene_camera->focal;
+
+    set_scene_camera(new_cam);
+
+    return true;
+  }
+  ///////////////////////////////////////////////////
+  ///////////////////////////////////////////////////
+  ///////////////////////////////////////////////////
+
+protected:
+  INLIB_CLASS_STRING_VALUE(style_scene,scene)
+  INLIB_CLASS_STRING_VALUE(style_gui,gui)
+public:
+  main(std::ostream& a_out,
+       inlib::sg::render_manager& a_gl_mgr,
+       const inlib::sg::base_freetype& a_ttf,
+       const std::string& a_res_dir,
+       const std::string& a_tmp_dir,
+       screen_client& a_screen_client,
+       bool a_verbose,
+       unsigned int a_mem_limit)
+  :sg::selection(a_screen_client)
+  ,parent(a_out,a_gl_mgr,a_ttf,*((inlib::sg::selection*)this),0,0,a_verbose)
+  ,parent_evd(*((inlib::sg::gui_viewer*)this))
+  ,parent_astro(a_screen_client,m_srvs)
+  ,m_screen_client(a_screen_client)
+  ,m_screen_cache(a_screen_client,a_out,false)  
+  ,m_menu_col(0) //at left
+  ,m_menu_row(0) //at bottom
+  ,m_srvs()
+  {
+  //m_screen_cache.add_dir(a_data_dir);
+    m_screen_cache.add_dir(a_res_dir);
+
+    m_opener.add_ext("*");
+    m_opener.add_ext(inlib::file::s_ext_fits());
+    m_opener.add_ext(inlib::file::s_ext_hdf5());
+    m_opener.add_ext(inlib::file::s_ext_aida());
+    m_opener.add_ext(inlib::file::s_ext_root());
+  //m_opener.add_ext(inlib::file::s_ext_csv());
+  //m_opener.add_ext(inlib::file::s_ext_tnt());
+  //m_opener.add_ext(inlib::file::s_ext_hiptxt());	
+    m_opener.add_ext(inlib::file::s_ext_jpg());
+    m_opener.add_ext(inlib::file::s_ext_png());
+#ifdef APP_USE_DCMTK
+    m_opener.add_ext(inlib::file::s_ext_dcm());
+#endif
+    m_opener.add_ext(inlib::file::s_ext_fog());
+#ifdef APP_USE_GRAPHVIZ
+    m_opener.add_ext(inlib::file::s_ext_dot());
+#endif
+#ifdef APP_USE_IV
+    m_opener.add_ext(inlib::file::s_ext_iv());
+    m_opener.add_ext(inlib::file::s_ext_hiv());
+#endif
+    m_opener.add_ext(inlib::file::s_ext_exsg());
+    m_opener.add_ext(inlib::file::s_ext_bsg());
+    m_opener.add_ext(inlib::file::s_ext_scenarios());
+    m_opener.add_ext(inlib::file::s_ext_slides());
+    m_opener.add_ext(inlib::file::s_ext_zvid());
+    m_opener.add_ext(inlib::file::s_ext_gdml());
+
+   {inlib::sg::bsg_factories bfac;
+    inlib::sg::add_factories(bfac);
+    exlib::sg::add_factories(bfac);
+#ifdef APP_USE_GRAPHVIZ
+    bfac.add_factory<exlib::graphviz::scene>();
+#endif
+    m_opener.add_opener(inlib::file::s_format_bsg(),new exlib::bsg_opener(bfac));}
+
+    m_opener.add_opener(inlib::file::s_format_root(),new exlib::rroot::opener());
+    m_opener.add_opener(inlib::file::s_format_fits(),new exlib::cfitsio_opener());
+    m_opener.add_opener(inlib::file::s_format_hdf5(),new exlib::hdf5::opener());
+    m_opener.add_opener(inlib::file::s_format_jpeg(),new exlib::jpeg_opener(a_mem_limit));
+    m_opener.add_opener(inlib::file::s_format_png(),new exlib::png_opener(a_mem_limit));
+#ifdef APP_USE_DCMTK
+    m_opener.add_opener(inlib::file::s_format_dcm(),new exlib::dcmtk::opener(a_mem_limit));
+#endif
+
+    m_opener.add_opener(inlib::file::s_format_fog(),new exlib::povama::opener());
+
+#ifdef APP_USE_GRAPHVIZ
+    m_opener.add_opener(inlib::file::s_format_dot(),new exlib::graphviz::opener());
+#endif
+
+#ifdef APP_USE_IV
+    m_opener.add_opener(inlib::file::s_format_iv(),new exlib::iv::opener());
+#endif
+
+  //m_opener.add_opener(inlib::file::s_format_csv(),new inlib::csv_opener());
+  //m_opener.add_opener(inlib::file::s_format_hippo(),new inlib::hippo_opener());
+
+   {inlib::xml::exsg::vreaders readers;
+#ifdef APP_USE_GRAPHVIZ
+      (inlib::xml::exsg::named_reader(exlib::graphviz::scene::s_class(),exlib::rsgml::read_node<exlib::graphviz::scene>));
+#endif
+    m_opener.add_opener(inlib::file::s_format_exsg(),new exlib::exsg_opener(readers));}
+
+    m_opener.add_opener(inlib::file::s_format_scenarios(),new exlib::scenarios_opener(m_opener.openers()));
+    m_opener.add_opener(inlib::file::s_format_slides(),new exlib::slides_opener(m_opener.openers()));
+    m_opener.add_opener(inlib::file::s_format_zvid(),new exlib::zvid_opener());
+    m_opener.add_opener(inlib::file::s_format_aida(),new exlib::aida_opener());
+
+    m_opener.add_opener(inlib::file::s_format_gdml(),new exlib::edep::opener());
+
+    ///////////////////////////////////////////////////
+    ///////////////////////////////////////////////////
+    ///////////////////////////////////////////////////
+    m_image_readers.add_reader(inlib::file::s_format_jpeg(),new exlib::jpeg::reader());
+    m_image_readers.add_reader(inlib::file::s_format_png(),new exlib::png::reader());
+    ///////////////////////////////////////////////////
+    ///////////////////////////////////////////////////
+    ///////////////////////////////////////////////////
+
+    m_params.m_auto_hide_scene = true;
+
+    m_res_dir = a_res_dir;
+    m_tmp_dir = a_tmp_dir;
+
+   {std::string _pwd;
+    if(!inlib::dir::pwd(_pwd)) {
+      m_out << "common::main::main : can't get pwd." << std::endl;
+    } else {
+      //m_out << "pwd : " << _pwd << std::endl;
+    }
+    m_pwd = _pwd;}
+
+    inlib::env_append_path("EXLIB_FONT_PATH",a_res_dir);
+
+    m_app_name = "wall_screen";
+    m_app_version = WALL_VERSION;
+
+    ////////////////////////////////////////////
+    /// cmaps //////////////////////////////////
+    ////////////////////////////////////////////
+    styles().add_colormap("default",inlib::sg::style_default_colormap());
+    styles().add_colormap("ROOT",inlib::sg::style_ROOT_colormap());
+
+    ////////////////////////////////////////////
+    /// wall.style /////////////////////////////
+    ////////////////////////////////////////////
+    //look for a wall.style in the res dir :
+   {std::string path = a_res_dir;
+    path += inlib::sep();
+    path += "wall.style";
+    if(inlib::file::exists(path)) exlib::xml::load_style_file(m_out,path,styles());}
+
+    styles().res_color(s_style_scene(),"screen_color",m_params.m_scene_screen_color);
+    set_gui_style(s_style_gui());
+
+    ////////////////////////////////////////////
+    /// <app>.srv //////////////////////////////
+    ////////////////////////////////////////////
+    //look for a srvs file in the res dir :
+   {std::string path = a_res_dir;
+    path += inlib::sep();
+    path += "srvs";
+    if(inlib::file::exists(path)) exlib::xml::load_srv_file(m_out,path,m_srvs);}
+
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    m_popup_cbks.add(new wall::background_popup(m_screen_client,*this,m_menu_col,m_menu_row));
+    m_popup_cbks.add(new inlib::cbk::plots_popup(*this));
+    m_popup_cbks.add(new inlib::cbk::healpix_popup(*this));
+    m_popup_cbks.add(new inlib::cbk::cfitsio_popup(*this));
+    m_popup_cbks.add(new inlib::cbk::image_popup(*this,inlib::sg::base_tex::s_class()));
+
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    set_file_finder(new inlib::file::cached_finder(m_screen_cache));
+
+    set_scene_clear_color(inlib::colorf_black());
+    inlib::sg::set_empty_scene_3D(*this,*this);
+    //set_meta_zone_had_not_been_shown();
+
+    //////////////////////////////////////////////////////
+    /// view_astro : /////////////////////////////////////
+    //////////////////////////////////////////////////////
+  //set_host(inlib::s_Clermont());
+    set_host(inlib::s_LAL_Cloud_40());
+    set_port(inlib::repserv_port_LAL_Cloud());
+
+    //////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////
+  //show_main_menu();
+  }
+  virtual ~main() {}
+protected:
+  main(const main& a_from)
+  :inlib::sg::ui(a_from)
+  ,inlib::sg::alert(a_from)
+  ,sg::selection(a_from)
+  ,parent(a_from)
+  ,parent_evd(a_from)
+  ,parent_astro(a_from)
+
+  ,m_screen_client(a_from.m_screen_client)
+  ,m_screen_cache(a_from.m_screen_cache)  
+  ,m_menu_col(a_from.m_menu_col)
+  ,m_menu_row(a_from.m_menu_row)
+  ,m_srvs(a_from.m_srvs)
+  {}
+private:
+  main& operator=(const main& a_from){
+    parent::operator=(a_from);
+    m_menu_col = a_from.m_menu_col;
+    m_menu_row = a_from.m_menu_row;
+    m_srvs = a_from.m_srvs;
+    return *this;
+  }
+public:
+  //wall::screen_client& screen_client() const {return m_screen_client;}
+
+  void set_menu_pos(unsigned int a_col,unsigned int a_row) {
+    m_menu_col = a_col;
+    m_menu_row = a_row;
+  }
+protected:
+  inlib::sg::base_camera* _create_camera(
+    inlib::sg::camera_type a_type,
+    float a_near_height
+  ) {
+    if(a_type==inlib::sg::camera_ortho) {
+      inlib::sg::lrbt* camera = new inlib::sg::lrbt;
+      set_camera(*camera,
+                 m_screen_client.m_cols,m_screen_client.m_rows,
+                 m_screen_client.m_col,m_screen_client.m_row,
+                 m_screen_client.m_bw,m_screen_client.m_bh,
+                 m_screen_client.m_ww,m_screen_client.m_wh,
+                 a_near_height);
+      return camera;
+    } else if(a_type==inlib::sg::camera_perspective) {
+      inlib::sg::frustum* camera = new inlib::sg::frustum;
+      set_camera(*camera,
+                 m_screen_client.m_cols,m_screen_client.m_rows,
+                 m_screen_client.m_col,m_screen_client.m_row,
+                 m_screen_client.m_bw,m_screen_client.m_bh,
+                 m_screen_client.m_ww,m_screen_client.m_wh,
+                 a_near_height);
+      return camera;
+    } else {
+      return 0;
+    }
+  }
+
+  template <class CAMERA>
+  static void set_camera(CAMERA& a_camera,
+                  unsigned int a_cols,unsigned int a_rows,
+    		  unsigned int a_col,unsigned int a_row,
+                  unsigned int a_bw,unsigned int a_bh, //pixels
+                  unsigned int a_ww,unsigned int a_wh, //scr visible pixels
+                  float a_near_height){
+    //a_row bottom (of screen) -> top
+    //a_col left -> right
+
+    // a_near_height must be mapped to (a_wh+2*a_bh)*a_rows-2*a_bh;
+
+    // we evaluate the border in WC.
+    float bh = float(a_bh) * a_near_height/float((a_wh+2*a_bh)*a_rows-2*a_bh);
+
+    // height of the world seen by one screen as if all borders
+    // had been visible pixels.
+    float height = (a_near_height+2*bh)/a_rows;
+
+    // aspect of one screen as if borders had been visible pixels.
+    float aspect = float(a_ww+2*a_bw)/float(a_wh+2*a_bh);
+    float width = aspect * height;
+
+    // left,bottom,right,top as if borders had been visibled pixels.
+    float left = -float(a_cols)*width*0.5F + float(a_col) * width;
+    float bottom = -float(a_rows)*height*0.5F + float(a_row) * height;
+    float right = left+width;
+    float top = bottom+height;
+  
+    // we evaluate the border in WC.
+    //float bh = float(a_bh) * height/float(a_wh+2*a_bh);
+    float bw = float(a_bw) * width/float(a_ww+2*a_bw); 
+
+    // we remove the border from the world seen by one screen.
+    left += bw;
+    right -= bw;
+    bottom += bh;
+    top -= bh;
+
+    a_camera.left.value(left);
+    a_camera.right.value(right);
+    a_camera.bottom.value(bottom);
+    a_camera.top.value(top);
+  }
+
+protected:
+  class anims : public virtual inlib::sg::ui {
+    INLIB_SCLASS(wall::common::main::anims)
+  public:
+    virtual void win_render() {}
+  public:
+    anims(){
+#ifdef INLIB_MEM
+      inlib::mem::increment(s_class().c_str());
+#endif
+    }
+    virtual ~anims() {
+#ifdef INLIB_MEM
+      inlib::mem::decrement(s_class().c_str());
+#endif
+    }
+  public:
+    anims(const anims& a_from)
+    :inlib::sg::ui(a_from)
+    {
+#ifdef INLIB_MEM
+      inlib::mem::increment(s_class().c_str());
+#endif
+    }
+    anims& operator=(const anims&){return *this;}
+  };
+
+public:
+  wall::screen_client& m_screen_client;
+  wall::screen_cache m_screen_cache;
+  unsigned int m_menu_col;
+  unsigned int m_menu_row;
+  inlib::xml::srvs m_srvs;
+};
+
+}}
+
+#endif

@@ -1,0 +1,134 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_action_diaporama
+#define wall_action_diaporama
+
+#include <inlib/sg/view_evd>
+
+#include "../dirit"
+#include "pos_data"
+
+#include <exlib/zit>
+
+namespace wall {
+namespace action {
+
+class wzit : public exlib::zitb {
+  typedef exlib::zitb parent;
+public:
+  virtual bool open(const std::string& a_file) {
+    std::string file;
+    if(!m_gv.find_file(a_file,file)){
+      exlib::zip_iterator::m_out << "wall::cbk::zit::open :"
+            << " viewer::find_file() failed." 
+            << std::endl;
+      return false;
+    }
+    return exlib::zitb::open(file);
+  }
+public:
+  wzit(std::ostream& a_out,bool a_verbose,const std::string& a_tmp_dir,inlib::sg::gui_viewer& a_gv)
+  :parent(a_out,a_verbose,a_tmp_dir)
+  ,m_gv(a_gv)
+  {}
+  virtual ~wzit(){}
+protected:
+  wzit(const wzit& a_from)
+  :parent(a_from)
+  ,m_gv(a_from.m_gv)
+  {}
+  wzit& operator=(const wzit& a_from){
+    parent::operator=(a_from);
+    return *this;
+  }
+protected:
+  inlib::sg::gui_viewer& m_gv;
+};
+
+inline unsigned int entry_what()       {return 0;}
+inline unsigned int entry_time()       {return 1;}
+inline unsigned int entry_clear()      {return 2;}
+inline unsigned int entry_hcam()       {return 3;}
+inline unsigned int entry_same()       {return 4;}
+inline unsigned int entry_one()        {return 5;}
+
+inline inlib::sg::return_action start_diaporama(inlib::sg::gui_viewer& a_gv,inlib::sg::entries& a_entries,const pos_data& a_data) {
+  inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+  if(!_evd) return inlib::sg::return_none;
+
+  const std::string& what = a_entries.values[entry_what()];
+
+  unsigned int msecs;
+  if(!inlib::to<unsigned int>(a_entries.values[entry_time()],msecs)) {
+    a_gv.pop_warn(a_data,"msecs not a uint");
+    return inlib::sg::return_to_render;     
+  }
+
+  unsigned int nclear;
+  if(!inlib::to<unsigned int>(a_entries.values[entry_clear()],nclear)) {
+    a_gv.pop_warn(a_data,"nclear not a uint");
+    return inlib::sg::return_to_render;     
+  }
+  
+  float hcam;
+  if(!inlib::to<float>(a_entries.values[entry_hcam()],hcam)) {
+    a_gv.map_warn_naui();
+    return inlib::sg::return_to_render;     
+  }
+
+  bool same;
+  if(!inlib::to(a_entries.values[entry_same()],same)) {
+    a_gv.pop_warn(a_data,"same not a bool");
+    return inlib::sg::return_to_render;     
+  }
+  
+  bool one_screen;
+  if(!inlib::to(a_entries.values[entry_one()],one_screen)) {
+    a_gv.pop_warn(a_data,"one_scree not a bool");
+    return inlib::sg::return_to_render;     
+  }
+  
+  inlib::file_iterator* fit = 0;
+  std::string sfx = "."+inlib::suffix(what);
+  if(sfx==inlib::file::s_ext_zvid()){
+    wzit* _it = new wzit(a_gv.out(),false,a_gv.tmp_dir(),a_gv);
+    fit = _it;          
+  } else {
+    dirit* _it = new dirit(a_gv.out(),false,a_gv,a_data.m_screen_client,same);
+    fit = _it;          
+  }
+
+  _evd->create_doc_anim(fit,a_gv.opener(),what,msecs,nclear,same,one_screen,hcam);
+
+  return inlib::sg::return_to_render;     
+}
+
+inline inlib::sg::return_action diaporama(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  inlib::sg::entries* entries = new inlib::sg::entries(a_gv.ttf());
+  a_gv.set_style(*entries);
+
+ {std::vector<std::string> opts;
+  a_gv.get_data_sub_dirs(inlib::wall::s_dir_diaporama(),opts);
+  std::vector<std::string> v;
+  a_gv.get_data_files(v); //should look also res dir.
+  inlib::filter(v,"*"+inlib::file::s_ext_zvid());       
+  inlib::append(opts,v);
+  entries->add_opts("dir/zvid",opts.size()?opts[0]:"",opts);} //0
+
+  entries->add_uint("millisecs",15000);                   //1
+  entries->add_uint("clear at",1);                        //2
+  entries->add_float("camera height",2);                  //3
+  entries->add_bool("same on all screens",true);          //4
+  entries->add_bool("if same, one screen ?",true);        //5
+
+  inlib::sg::add_callback(a_gv,*entries,start_diaporama,a_data);
+
+  a_gv.show_widget(a_data,entries);
+
+  return inlib::sg::return_to_render;     
+}
+
+}}
+
+#endif

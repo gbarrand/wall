@@ -1,0 +1,349 @@
+
+  int verbose = 0;
+
+#ifdef INLIB_MEM
+  inlib::mem::set_check_by_class(true);{
+#endif
+
+  //bool params_from_env = false; //xxx
+  bool params_from_env = true;
+
+  inlib::args args(argc,argv);
+
+  ////////////////////////////////////////////////////
+  /// config : begin /////////////////////////////////
+  ////////////////////////////////////////////////////
+  std::string doc_dir;
+  inlib::dir::home(doc_dir);
+  if(doc_dir.empty()) {
+    std::cout << "wall_master : can't get home directory." << std::endl;
+    return EXIT_FAILURE;
+  }
+  doc_dir += inlib::sep();
+  doc_dir += "Documents";
+  doc_dir += inlib::sep();
+  doc_dir += "wall";
+
+#define ENV_PREFIX "WALL_MASTER_"
+
+  inlib::mparam<int>(params_from_env,args,ENV_PREFIX,"verbose",0,verbose);
+
+  std::string this_host;
+  inlib::mparam(params_from_env,args,ENV_PREFIX,"host","",this_host);
+  if(verbose) {
+    std::cout << "wall_master :"
+              << " arg host is " << inlib::sout(this_host) << "."
+              << std::endl;
+  }
+
+  unsigned int inet_port;
+  inlib::mparam<unsigned int>(params_from_env,args,ENV_PREFIX,"port",50700,inet_port);
+
+  if(verbose) {
+    std::cout << "wall_master : port is " << inet_port << "." << std::endl;
+  }
+
+  std::string DOCUMENT;
+#ifdef __APPLE__
+  //An NSApplication::openFile puts the file in args.
+  //Look for that.
+  args.file(DOCUMENT);
+#endif
+  if(DOCUMENT.empty()) {
+    inlib::mparam(params_from_env,args,ENV_PREFIX,"document","",DOCUMENT);
+    //inlib::replace(DOCUMENT,"@@version@@",SOinlib::wall::EVT_VERSION);
+    //inlib::replace(DOCUMENT,"@@version_vrp@@",SOinlib::wall::EVT_VERSION_VRP);
+  }
+
+  bool wcache_wget;
+  inlib::mparam_bool(params_from_env,args,ENV_PREFIX,"wcache_wget",false,wcache_wget);
+
+  unsigned int control_window_width;
+  inlib::mparam<unsigned int>(params_from_env,args,ENV_PREFIX,"control_window_width",800,control_window_width);
+
+  unsigned int accept_timeout; //secs
+  inlib::mparam<unsigned int>(params_from_env,args,ENV_PREFIX,"accept_timeout",5,accept_timeout);
+
+  ////////////////////////////////////////////////////
+  /// config : end ///////////////////////////////////
+  ////////////////////////////////////////////////////
+  screens_t screens;
+  //clientinfoss_t clientinfoss;
+
+  unsigned int ww = 0;
+  unsigned int wh = 0;
+  unsigned int bw = 0;
+  unsigned int bh = 0;
+
+  unsigned int cols = 0;
+  unsigned int rows = 0;
+
+  if(this_host.empty()) {
+    if(!inlib::net::host_name(std::cout,this_host)){
+      std::cout << "wall_master :"
+                << " cannot get computer name."
+                << std::endl;
+      return EXIT_FAILURE;
+    }
+    if(verbose) {
+      std::cout << "wall_master :"
+                << " inlib::net::inet_host() returns "
+                << inlib::sout(this_host) << "."
+                << std::endl;
+    }
+  }
+
+  inlib::net::inet_socket* server_sock = new inlib::net::inet_socket(std::cout,verbose);
+  if(!server_sock->bind(this_host,inet_port,inlib::net::num_try(),1,true)) {
+    std::cout << "wall_master :"
+              << " socket bind failed for " << inlib::sout(this_host)
+              << std::endl;
+    return EXIT_FAILURE;
+  }
+  int server_sock_id = server_sock->socket();
+
+  unsigned int index = 0;
+  while(true) {
+    inlib::net::inet_socket* client_sock = new inlib::net::inet_socket(std::cout,verbose);
+
+    // wait a client in a non blocking mode :
+    if(verbose) {
+      std::cout << "wall_master : on port " << inet_port
+                << " wait a client..."
+                << std::endl;
+    }
+
+    AcceptTag tag;
+    tag.m_timeout = accept_timeout*1000000; //microsecs
+    tag.m_start = inlib::atime::now();    
+    client_sock->set_accept_func(accept_func,&tag); //accept_func is a timer.
+    if(!client_sock->accept(server_sock_id,false)) {
+      delete client_sock;
+      stop_screens(screens);
+      delete server_sock;
+      return EXIT_FAILURE;
+    }
+    if(client_sock->socket()==(-1)) {
+      std::cout << "wall_master :"
+                << " waited too long for a client (" << index << ")."
+                << " We continue with the ones we have."
+                << std::endl;
+      delete client_sock;
+      break;
+    }
+
+    unsigned int rws = 0;
+    unsigned int cls = 0;
+    unsigned int rw = 0;
+    unsigned int cl = 0;
+    unsigned int w = 0;
+    unsigned int h = 0;
+    unsigned int b_w = 0;
+    unsigned int b_h = 0;
+
+    if(!client_sock->send<unsigned int>(index)) {
+      delete client_sock;
+      stop_screens(screens);
+      delete server_sock;
+      return EXIT_FAILURE;
+    }
+
+    if(!get_screen_data(*client_sock,cls,rws,cl,rw,w,h,b_w,b_h)) {
+      delete client_sock;
+      stop_screens(screens);
+      delete server_sock;
+      return EXIT_FAILURE;
+    }
+
+    if(verbose) {
+      std::cout << "wall_master : on port " << inet_port 
+                << " got client (" << rw << "," << cl << ")."
+                << std::endl;
+    }
+
+    if(screens.empty()) {
+      //first client enforces cols, rows, ww, wh.
+      cols = cls;
+      rows = rws;
+      ww = w;
+      wh = h;
+      bw = b_w;
+      bh = b_h;
+    } else {
+      if(cls!=cols) {
+         std::cout << "wall_master : on port " << inet_port 
+                   << " receive bad cols from client."
+                   << " expected " << cols
+                   << " received " << cls << "."
+                   << std::endl;
+         delete client_sock;
+         stop_screens(screens);
+         delete server_sock;
+         return EXIT_FAILURE;
+      }
+      if(rws!=rows) {
+         std::cout << "wall_master : on port " << inet_port 
+                   << " receive bad rows from client."
+                   << " expected " << rows
+                   << " received " << rws << "."
+                   << std::endl;
+         delete client_sock;
+         stop_screens(screens);
+         delete server_sock;
+         return EXIT_FAILURE;
+      }
+      if((w!=ww)||(h!=wh)){
+         std::cout << "wall_master : WARNING : on port " << inet_port 
+                   << " client (" << rw << "," << cl << ")"
+                   << " has not same screen size than first client."
+                   << " client (" << w << "," << h << ")"
+                   << " first (" << ww << "," << wh << ")."
+                   << std::endl;
+      }
+    }
+
+    screens.push_back(client_sock);
+    //clientinfoss[client_sock] = ClientInfos(index,cl,rw);
+    index++;
+
+    if(screens.size()&&(screens.size()==(cols*rows))) 
+      break; //have all screens.
+
+/*
+    inlib_lforcit(inlib::net::base_socket*,screens,it) {
+      if(!(*it)->is_active()) {
+         std::cout << "wall_master :"
+                   << " a client socket is already down."
+                   << std::endl;
+         stop_screens(screens);
+         delete server_sock;
+         return EXIT_FAILURE;
+      }
+    }
+    if(!server_sock->is_active()) {
+       std::cout << "wall_master :"
+                 << " server_sock is already down."
+                 << std::endl;
+       stop_screens(screens);
+       delete server_sock;
+       return EXIT_FAILURE;
+    }
+*/
+  }
+
+  if((cols==0)||(rows==0)||(ww==0)||(wh==0)) {
+    std::cout << "wall_master :"
+              << " one of cols,rows,ww,wh is 0. Stop." 
+              << "(cols " << cols
+              << " rows " << rows
+              << " ww " << ww
+              << " wh " << wh << ")."
+              << std::endl;
+    stop_screens(screens);
+    delete server_sock;
+    return EXIT_FAILURE;
+  }
+
+  if( ((2*bw)>=ww) || ((2*bh)>=wh) ){
+    std::cout << "wall_master :"
+              << " too large border !" 
+              << " (" << bw << "," << ww << ")" 
+              << " (" << bh << "," << wh << ")" 
+              << std::endl;
+    stop_screens(screens);
+    delete server_sock;
+    return EXIT_FAILURE;
+  }
+
+  if(screens.size()!=(cols*rows)) {
+    std::cout << "wall_master : some screens are missing." << std::endl;
+  } else {
+    if(verbose) {
+      std::cout << "wall_master : got all screens." << std::endl;
+    }
+  }
+
+  inlib::web::cache web_cache(std::cout,verbose?true:false);
+  if(wcache_wget) web_cache.set_wget_func();
+
+  if(DOCUMENT.size()) {
+    if( (DOCUMENT.substr(0,4)=="ftp:")  ||
+        (DOCUMENT.substr(0,5)=="http:") ){
+      if(verbose) {
+        std::cout << "wall_master :"
+                  << " fetch web DOCUMENT "
+                  << inlib::sout(DOCUMENT) << " ..."
+                  << std::endl;
+      }
+      std::string file;
+      if(!web_cache.fetch(DOCUMENT,file)) {
+        //not fatal.
+        DOCUMENT.clear();
+      } else{
+        DOCUMENT = file;
+      }   
+    }
+  }
+
+  // even if no DOCUMENT, we have to send something.
+  // It is part of the protocol that screens wait something.
+  if(verbose) {
+    std::cout << "wall_master :"
+              << " send to screens DOCUMENT "
+              << inlib::sout(DOCUMENT) << " ..."
+              << std::endl;
+  }
+  if(!send_file(std::cout,screens,inlib::wall::EVT_USER_FILE(),DOCUMENT)) {
+    std::cout << "wall_master :"
+              << " send DOCUMENT file " << DOCUMENT << " failed."
+              << std::endl;
+    stop_screens(screens);
+    delete server_sock;
+    return EXIT_FAILURE;
+  }
+
+  unsigned int wall_ww = cols*(ww+2*bw);
+  unsigned int wall_wh = rows*(wh+2*bh);
+  float wall_aspect = float(wall_ww)/float(wall_wh);
+
+  unsigned int www = control_window_width;
+  unsigned int wwh = (unsigned int)(float(control_window_width)/wall_aspect);
+
+  if(!send_window_master_size(std::cout,screens,www,wwh)) {
+    std::cout << "send_window_master_size failed." << std::endl;
+    stop_screens(screens);
+    delete server_sock;
+    return EXIT_FAILURE;
+  }
+
+  /////////////////////////////////////////////////
+  /////////////////////////////////////////////////
+  /////////////////////////////////////////////////
+  std::vector<std::string> files;
+
+  //std::cout << "wall_master : main loop..."
+  //          << std::endl;
+
+  bool to_quit = false;
+
+  screens_t sync_move_screens;
+  unsigned int move_timer_interval = 16; //millisecs.
+  move_timer _move_timer(std::cout,move_timer_interval,screens,sync_move_screens);
+
+  screens_t sync_anim_screens;
+  anims_timer _anims_timer(std::cout,0,screens,sync_anim_screens,doc_dir);
+
+  screens_t sync_screens;
+
+  std::string GET_URL_cookie;
+
+  inlib::buffer_cache<inlib::nomutex> UPDATE_NODE_cache;
+  UPDATE_NODE_cache.set_size(4*screens.size()); //4 image per screen.
+  std::string UPDATE_NODE_cookie;
+
+  screens_t pick_screens;              
+  std::vector<std::string> pick_paths;
+
+  inlib::wall::events all_events;
+  inlib::wall::events delayed_events;
+

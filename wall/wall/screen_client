@@ -1,0 +1,547 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_screen_client
+#define wall_screen_client
+
+#include <inlib/net/inet_socket>
+#include <inlib/mparam>
+#include <inlib/wall/send_event>
+#include <inlib/wall/get_event>
+#include <inlib/wall/events>
+
+#include <list>
+
+namespace wall {
+
+class screen_client {
+public:
+  inlib::net::inet_socket& socket() {return m_socket;}
+
+  bool wait_file(const std::string& a_file,bool a_warn_empty = false) {
+    while(true) { //wait a EVT_USER_FILE().
+      inlib::wall::event event;
+      if(!inlib::wall::wait_event(m_socket,event)) {
+        m_out << "wall::screen_client::wait_file :"
+              << " wait_event failed." 
+              << std::endl;
+        return false;
+      }
+      if((event.type==inlib::wall::EVT_USEREVENT)&&(event.user.code==inlib::wall::EVT_USER_FILE())){
+        unsigned int length;
+        read_event_file(m_out,event,a_file,length);
+        if(a_warn_empty) {
+          if(length==0) {
+            m_out << "wall::screen_client::wait_file :"
+                  << " WARNING : receive an empty file."
+                  << std::endl;
+            //not fatal
+          }
+        }
+        return true;
+      } else {
+        //WARNING : event must be standalone to be respawned. It must NOT depend of extra "send" from the master.
+        m_events.push_event(event);
+      }
+    }
+  }
+
+  bool wait_buffer(size_t& a_sz,char*& a_buffer,bool a_warn_empty = false) {
+    while(true) { //wait a EVT_USER_FILE().
+      inlib::wall::event event;
+      if(!inlib::wall::wait_event(m_socket,event)) {
+        m_out << "wall::screen_client::wait_buffer :"
+              << " wait_event failed." 
+              << std::endl;
+        a_sz = 0;
+        a_buffer = 0;
+        return false;
+      }
+      if((event.type==inlib::wall::EVT_USEREVENT)&&(event.user.code==inlib::wall::EVT_USER_FILE())){
+        read_event_buffer(event,a_sz,a_buffer);
+        if(a_warn_empty) {
+          if(a_sz==0) {
+            m_out << "wall::screen_client::wait_buffer :"
+                  << " WARNING : receive an empty buffer."
+                  << std::endl;
+            //not fatal
+          }
+        }
+        return true;
+      } else {
+        //WARNING : event must be standalone to be respawned. It must NOT depend of extra "send" from the master.
+        //if(event.type==inlib::wall::EVT_USEREVENT) {
+        //  m_out << "wall::screen_client::wait_buffer :"
+        //        << " WARNING : receive EVT_USEREVENT with code " << event.user.code << std::endl;
+        //} else {
+        //  if(event.type!=inlib::wall::EVT_MOUSEMOTION) {     
+        //    m_out << "wall::screen_client::wait_buffer :"
+        //          << " WARNING : receive event type " << int(event.type) << std::endl;
+        //  }
+        //}
+        m_events.push_event(event);
+      }
+    }
+  }
+
+  bool wait_string(std::string& a_string) {
+    while(true) { //wait a EVT_USER_STRING().
+      inlib::wall::event event;
+      if(!inlib::wall::wait_event(m_socket,event)) {
+        m_out << "wall::screen_client::wait_string :"
+              << " wait_event failed." 
+              << std::endl;
+        a_string.clear();
+        return false;
+      }
+      if((event.type==inlib::wall::EVT_USEREVENT)&&(event.user.code==inlib::wall::EVT_USER_STRING())){
+        read_event_string(event,a_string);
+        return true;
+      } else {
+        //WARNING : event must be standalone to be respawned. It must NOT depend of extra "send" from the master.
+        m_events.push_event(event);
+      }
+    }
+  }
+
+  bool wait_string(const std::vector<std::string>& a_opts,std::string& a_string) {
+    while(true) { //wait a EVT_USER_STRING().
+      inlib::wall::event event;
+      if(!inlib::wall::wait_event(m_socket,event)) {
+        m_out << "wall::screen_client::wait_string :"
+              << " wait_event failed." 
+              << std::endl;
+        a_string.clear();
+        return false;
+      }
+      if((event.type==inlib::wall::EVT_USEREVENT)&&(event.user.code==inlib::wall::EVT_USER_STRING())){
+        read_event_string(event,a_string); //it deletes event.data.
+        if(inlib::belong(a_opts,a_string)) return true;
+        inlib::wall::event _event;
+        fill_event_with_string(a_string,_event);
+        _event.user.code = inlib::wall::EVT_USER_STRING();
+        m_events.push_event(_event);
+      } else {
+        //WARNING : event must be standalone to be respawned. It must NOT depend of extra "send" from the master.
+        m_events.push_event(event);
+      }
+    }
+  }
+
+
+  const std::string& master_host() const {return m_master_host;}
+
+  unsigned int index() const {return m_index;}
+  unsigned int cols() const {return m_cols;}
+  unsigned int rows() const {return m_rows;}
+
+public:
+  screen_client(std::ostream& a_out,bool a_verbose = false)
+  :m_out(a_out)
+  ,m_socket(a_out,a_verbose)
+  ,m_verbose(a_verbose)
+  ,m_master_host()
+  ,m_index(0)
+  ,m_cols(0),m_rows(0)
+  ,m_col(0),m_row(0)
+  ,m_ww(0),m_wh(0)
+  ,m_bw(0),m_bh(0)
+  ,m_wbw(0),m_wbh(0) //screen size including borders as pixels.
+  ,m_all_ww(0),m_all_wh(0),m_all_aspect(0)
+  ,m_master_ww(0),m_master_wh(0)
+  {}
+  virtual ~screen_client() {
+    m_socket.disconnect();
+  }
+protected:
+  screen_client(const screen_client& a_from)
+  :m_out(a_from.m_out)
+  ,m_socket(a_from.m_out,a_from.m_verbose)
+  ,m_events(a_from.m_events)
+  ,m_verbose(a_from.m_verbose)
+  {}
+  screen_client& operator=(const screen_client&){return *this;}
+public:
+  void set_verbose(bool a_v) {
+    m_verbose = a_v;
+    m_socket.set_verbose(a_v);
+  }
+
+  bool initialize(bool a_params_from_env,
+                  const std::string& a_env_prefix,
+                  const inlib::args& a_args,
+                  unsigned int a_ww,unsigned int a_wh) {
+  
+    std::string master_host;
+    if(!inlib::mparam(a_params_from_env,a_args,a_env_prefix,"master","",master_host)) {
+      m_out << "wall::screen_client::initialize :"
+            << " master_host not defined."
+            << std::endl;
+      return false;
+    }
+
+    if(m_verbose) {
+      m_out << "wall::screen_client::initialize :"
+            << " master_host is " << inlib::sout(master_host) << "."
+            << std::endl;
+    }
+    
+    //use get_param()
+
+    unsigned int port;
+    if(!inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"port",0,port)) {
+      m_out << "wall::screen_client::initialize :"
+            << " port not defined."
+            << std::endl;
+      return false;
+    }
+
+    if(m_verbose) {
+      m_out << "wall::screen_client::initialize :"
+            << " port is " << port << "."
+            << std::endl;
+    }
+    
+    unsigned int _cols;
+    if(!inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"cols",0,_cols)) {
+      m_out << "wall::screen_client::initialize :"
+            << " cols not defined."
+            << std::endl;
+      return false;
+    }
+
+    unsigned int _rows;
+    if(!inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"rows",0,_rows)) {
+      m_out << "wall::screen_client::initialize :"
+            << " rows not defined."
+            << std::endl;
+      return false;
+    }
+
+    unsigned int col;
+    if(!inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"col",0,col)) {
+      m_out << "wall::screen_client::initialize :"
+            << " col not defined."
+            << std::endl;
+      return false;
+    }
+
+    unsigned int row;
+    if(!inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"row",0,row)) {
+      m_out << "wall::screen_client::initialize :"
+            << " row not defined."
+            << std::endl;
+      return false;
+    }
+  
+    unsigned int bw = 0;
+    inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"border_width",0,bw);
+
+    unsigned int bh = 0;
+    inlib::mparam<unsigned int>(a_params_from_env,a_args,a_env_prefix,"border_height",0,bh);
+  
+    if(_cols==0) {
+      m_out << "wall::screen_client::initialize :"
+            << " cols is 0."
+            << std::endl;
+      return false;
+    }
+    if(_rows==0) {
+      m_out << "wall::screen_client::initialize :"
+            << " rows is 0."
+            << std::endl;
+      return false;
+    }
+    if(_cols<=col) {
+      m_out << "wall::screen_client::initialize :"
+            << " cols<=col."
+            << std::endl;
+      return false;
+    }
+    if(_rows<=row) {
+      m_out << "wall::screen_client::initialize :"
+            << " rows<=row."
+            << std::endl;
+      return false;
+    }  
+
+    unsigned int client_index;
+   {for(unsigned int itry=0;itry<10;itry++) {
+      if(!m_socket.connect(master_host,port,inlib::net::num_try(),1)) {
+        m_out << "wall::screen_client::initialize :"
+              << " socket.connect failed."
+              << std::endl;
+        return false;
+      }
+      if(m_verbose) {
+        m_out << "wall::screen_client::initialize :"
+              //<< " for pid " << inlib::process_id()
+              << " fetch index for (" << row << "," << col << ") ..."
+              << std::endl;
+      }
+      if(!m_socket.fetch<unsigned int>(client_index)) {
+        m_out << "wall::screen_client::initialize :"
+              //<< " for pid " << inlib::process_id()
+              << " socket.fetch(client_index) failed."
+              << " Try (" << (itry+1) << ") again to connect ..."
+              << std::endl;
+        //return false;
+        continue;
+      }
+      break;
+    }}
+
+    if(m_verbose) {
+      std::string this_host;
+      if(!inlib::net::host_name(m_out,this_host)){
+        m_out << "wall::screen_client::initialize :"
+              << " can't get host name."
+              << std::endl;
+      } else {
+        m_out << "wall::screen_client::initialize :"
+              //<< " for pid " << inlib::process_id()
+              << " index " << client_index << " on host " << this_host << "."
+              << std::endl;
+      }
+    }
+
+    inlib::wall::wbuf b(m_out,8*sizeof(unsigned int));
+
+    b.write<unsigned int>(_cols);
+    b.write<unsigned int>(_rows);
+    b.write<unsigned int>(col);
+    b.write<unsigned int>(row);
+    b.write<unsigned int>(a_ww);
+    b.write<unsigned int>(a_wh);
+    b.write<unsigned int>(bw);
+    b.write<unsigned int>(bh);
+
+    if(!m_socket.send<inlib::uint64>(b.length())) {
+      m_out << "wall::screen_client::initialize : socket.send failed." << std::endl;
+      return false;
+    }
+    if(!m_socket.send_buffer(b.buf(),b.length())) {
+      m_out << "wall::screen_client::initialize : socket.send failed." << std::endl;
+      return false;
+    }
+  
+    if(m_verbose) {
+      m_out << "wall::screen_client::initialize :"
+            //<< " for pid " << inlib::process_id()
+            << " end for (" << row << "," << col << ") and index " << client_index
+            << std::endl;
+    }
+
+    // set fields :
+    m_master_host = master_host;
+    m_index = client_index;
+    m_cols = _cols;
+    m_rows = _rows;
+    m_col = col;
+    m_row = row;
+    m_ww = a_ww;
+    m_wh = a_wh;
+    m_bw = bw;
+    m_bh = bh;
+    m_wbw = a_ww+2*bw; 
+    m_wbh = a_wh+2*bh;
+  
+    //overall number of pixels,
+    unsigned int aww = _cols * (a_ww+2*bw); 
+    unsigned int awh = _rows * (a_wh+2*bh);
+  
+    m_all_ww = aww;
+    m_all_wh = awh;
+  
+    m_all_aspect = float(aww)/float(awh);
+  
+    return true;
+  }
+  
+  bool wait_window_master_size() {
+    while(true) { //wait a EVT_USER_WINDOW_MASTER_SIZE().
+      inlib::wall::event event;
+      if(!inlib::wall::wait_event(m_socket,event)) {
+        m_out << "wall::screen_client::wait_window_master_size :"
+              << " wait_event failed." 
+              << std::endl;
+        return false;
+      }
+      if((event.type==inlib::wall::EVT_USEREVENT)&&(event.user.code==inlib::wall::EVT_USER_WINDOW_MASTER_SIZE())){
+        inlib::read_buffer<unsigned int>((char*)&(event.user.data1),m_master_ww);
+        inlib::read_buffer<unsigned int>((char*)&(event.user.data2),m_master_wh);
+        return true;  
+      } else {
+        //WARNING : event must be standalone to be respawned. It must NOT depend of extra "send" from the master.
+        m_events.push_event(event);
+      }
+    }
+  }
+
+  void cvt_local_to_all(int& a_x,int& a_y) {
+    unsigned int left = m_col * m_wbw;
+    unsigned int bottom = m_row * m_wbh;
+    a_x = a_x + (left + m_bw);
+    a_y = a_y + (bottom + m_bh);
+  }
+
+  void cvt_all_to_local(int& a_x,int& a_y) {
+    // output (a_x,a_y) is in local screen coords "within border".
+    // Then returned (0,0) is the bottom-left corner of local screen.
+    unsigned int left = m_col * m_wbw;
+    unsigned int bottom = m_row * m_wbh;
+    a_x = a_x - (left + m_bw);
+    a_y = a_y - (bottom + m_bh);
+  }
+
+  bool is_all_within_local(int a_x,int a_y) {
+    // return false if (a_x,a_y) in wall coords are within local screen coords "within border".
+    unsigned int left = m_col * m_wbw;
+    unsigned int bottom = m_row * m_wbh;
+    int local_x = a_x - (left + m_bw);
+    int local_y = a_y - (bottom + m_bh);
+    if((local_x<0)||(local_x>=int(m_ww))) return false;    
+    if((local_y<0)||(local_y>=int(m_wh))) return false;    
+    return true;
+  }
+
+  void cvt_all_to_col_row(int a_x,int a_y,unsigned int& a_col,unsigned int& a_row) {
+    a_col = a_x/m_wbw;
+    a_row = a_y/m_wbh;
+  }
+
+  std::ostream& out() const {return m_out;}
+public:
+  size_t num_events() const {return m_events.size();}
+
+  bool get_event(inlib::wall::event& a_event){return m_events.get_event(a_event);}
+public:
+  bool net_poll_event(bool& a_has,inlib::wall::event& a_event){
+    if(get_event(a_event)) {
+      a_has = true;
+      return true;
+    }
+    bool have_input;
+    if(!m_socket.is_there_input(have_input)) {
+      a_has = false;
+      return false;
+    }
+    if(!have_input) {
+      a_has = false;
+      return true;
+    }
+    //m_out << "have input..." << std::endl;
+    //m_out << "receive : " << s << std::endl;
+    if(!inlib::wall::wait_event(m_socket,a_event)) {
+      a_has = false;
+      return false;
+    }
+    a_has = true;
+    return true;
+  }  
+
+  bool send_once(int a_code){
+    //NOTE : and what if the index=0 screen_client had stopped ?
+    if(m_index==0) { //only first screen_client send the request.
+      inlib::wall::event event;
+      event.type = inlib::wall::EVT_USEREVENT;
+      event.user.type = inlib::wall::EVT_USEREVENT;
+      event.user.code = a_code;
+      event.user.data1 = 0;
+      event.user.data2 = 0;
+      if(!inlib::wall::send_event(m_socket,event)) {
+        m_out << "wall::screen_client::send_once :"
+              << " send_event failed." 
+              << std::endl;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool send_once(int a_code,const std::string& a_string){
+    //NOTE : and what if the index=0 screen_client had stopped ?
+    if(m_index==0) { //only first screen_client send the request.
+      inlib::wall::event event;
+      event.user.code = a_code;
+      fill_event_with_string(a_string,event);
+      bool status = inlib::wall::send_event(m_socket,event);
+      if(!status) {
+        m_out << "wall::screen_client::send_once(string) :"
+              << " send_event failed." 
+              << std::endl;
+      }
+      delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+      inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+      return status;
+    }
+    return true;
+  }
+
+  bool send(int a_code){
+    inlib::wall::event event;
+    event.type = inlib::wall::EVT_USEREVENT;
+    event.user.type = inlib::wall::EVT_USEREVENT;
+    event.user.code = a_code;
+    event.user.data1 = 0;
+    event.user.data2 = 0;
+    if(!inlib::wall::send_event(m_socket,event)) {
+      m_out << "wall::screen_client::send :"
+            << " send_event failed." 
+            << std::endl;
+      return false;
+    }
+    return true;
+  }
+
+  bool send(int a_code,const std::string& a_string){
+    inlib::wall::event event;
+    event.user.code = a_code;
+    fill_event_with_string(a_string,event);
+    bool status = inlib::wall::send_event(m_socket,event);
+    if(!status) {
+      m_out << "wall::screen_client::send(string) :"
+            << " send_event failed." 
+            << std::endl;
+    }
+    delete [] ((char*)event.user.data2);
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    return status;
+  }
+
+protected:
+  std::ostream& m_out;
+  inlib::net::inet_socket m_socket;
+  inlib::wall::events m_events;
+  bool m_verbose;
+//public:
+  std::string m_master_host;
+  unsigned int m_index;
+public:
+  unsigned int m_cols;
+  unsigned int m_rows;
+  unsigned int m_col;
+  unsigned int m_row;
+  unsigned int m_ww;      //one screen width in pixels (without border)
+  unsigned int m_wh;      //one screen height in pixels (without borders)
+  unsigned int m_bw;
+  unsigned int m_bh;
+//protected:
+  unsigned int m_wbw;     //m_ww+2*m_bw; 
+  unsigned int m_wbh;     //m_wh+2*m_bh;
+public:
+  unsigned int m_all_ww;  //m_cols*(m_ww+2*m_bw); 
+  unsigned int m_all_wh;  //m_rows*(m_wh+2*m_bh);
+  float m_all_aspect;     //(m_cols*(m_ww+2*m_bw))/(m_rows*(m_wh+2*m_bh))
+protected:
+  unsigned int m_master_ww;
+  unsigned int m_master_wh;
+};
+
+}
+
+#endif

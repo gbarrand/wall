@@ -1,0 +1,82 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_screen_cache
+#define wall_screen_cache
+
+// used by screen apps.
+
+#include "screen_client"
+
+#include <inlib/fcache>
+#include <inlib/fmanip>
+//#include <inlib/file>
+
+namespace wall {
+
+class screen_cache : public inlib::file::base_cache {
+  typedef inlib::file::base_cache parent;
+public:
+  virtual bool fetch_file(const std::string& a_what,const std::string& a_file){
+
+    //m_out << "screen_cache::fetch_file : screen_client " << ::getpid()
+    //      << " fetch... " << a_file
+    //      << std::endl;
+
+    // search on m_dirs screen machines (for softinex.slides) :
+    std::string path;
+    if(inlib::find_with_dirs(m_out,m_dirs,a_what,path)) {
+      if(!inlib::file::copy_bytes(path,a_file)) {
+        m_out << "wall::screen_cache::fetch_file :"
+              << " inlib::cp of " << path << " to " << a_file << " failed."
+              << std::endl;
+        return false;
+      }
+      return true;
+    }
+
+    //not found in m_dirs screen machines, ask to the master :
+
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_GET_FILE(),a_what)) return false;
+
+    if(!m_screen_client.wait_file(a_file)) {
+      m_out << "wall::screen_cache::fetch_file :"
+            << " wait_file failed." 
+            << std::endl;
+      return false;
+    }
+    
+    //m_out << "screen_cache::fetch_file : screen_client " << ::getpid()
+    //      << " got " << a_file
+    //      << std::endl;
+
+    return true;   
+  }
+public:
+  screen_cache(screen_client& a_client,std::ostream& a_out,bool a_verbose)
+  :parent(a_out,a_verbose)
+  ,m_screen_client(a_client)
+  {}
+  virtual ~screen_cache(){}
+public:
+  screen_cache(const screen_cache& a_from)
+  :inlib::file::cache(a_from)
+  ,parent(a_from)
+  ,m_screen_client(a_from.m_screen_client)
+  ,m_dirs(a_from.m_dirs)
+  {}
+protected:
+  screen_cache& operator=(const screen_cache& a_from){
+    m_dirs = a_from.m_dirs;
+    return *this;
+  }
+public:
+  void add_dir(const std::string& a_dir) {m_dirs.push_back(a_dir);}
+protected:
+  screen_client& m_screen_client;
+  std::vector<std::string> m_dirs;
+};
+
+}
+
+#endif

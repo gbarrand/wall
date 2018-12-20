@@ -1,0 +1,43 @@
+<scenarios>
+
+  <scenario name="pi0_in_em_calo">
+    <console>pi0 shooted in an electromagnetic calorimeter (done with Geant4)</console>
+  </scenario>
+
+  <scenario name="pi0_in_em_calo_fr">
+    <console>pi0 dans un calorimetre electromagnetique (fait avec Geant4)</console>
+  </scenario>
+
+  <scenario name="G4_exa_em_calo">
+    <console>Simulation Geant4 d'un petit calorimetre electromagnetique</console>
+  </scenario>
+
+  <scenario name="nemo3">
+    <console>NEMO events</console>
+  </scenario>
+
+  <scenario name="higgs_at_LHC">
+    <console>Higgs at LHC ?</console>
+  </scenario>
+
+  <scenario name="pythia8_H_ZZ_4mu">
+    <console>G4 + pythia8 : H -&gt; ZZ -&gt; 4 mu</console>
+  </scenario>
+
+  <scenario name="pythia8_H_gamma_gamma">
+    <console>G4 + pythia8 : H -&gt; gamma gamma</console>
+  </scenario>
+
+  <scenario name="images_LSST">
+    <console>images LSST</console>
+  </scenario>
+
+  <scenario name="stability_test">
+    <console>Stability test</console>
+  </scenario>
+
+  <scenario name="google_dc">
+    <console>Google data centers</console>
+  </scenario>
+
+</scenarios>

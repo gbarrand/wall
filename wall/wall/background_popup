@@ -1,0 +1,78 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_background_popup
+#define wall_background_popup
+
+#include <inlib/cbk/popup>
+#include <inlib/cbk/background_popup>
+
+#include "action/files"
+#include "action/menu_screen"
+#include "action/diaporama"
+#include "action/exas"
+
+namespace wall {
+
+class background_popup : public inlib::cbk::popup {
+  typedef inlib::cbk::popup parent;
+public:
+  virtual void add_items(inlib::sg::ilist& a_list,int a_x,int a_y) const {
+    inlib::sg::pos_data data(true,a_x,a_y);
+    inlib::sg::add_item(m_gv,a_list,"set color",inlib::cbk::background_popup_action_color,data);
+    inlib::sg::add_item(m_gv,a_list,"camera menu",inlib::sg::action_toggle_camera_menu_at_pos,data);
+    inlib::sg::add_item(m_gv,a_list,"examples",action::exas,action::pos_data(m_screen_client,true,a_x,a_y));
+    inlib::sg::add_item(m_gv,a_list,"create node",inlib::exa::create_node,data);
+//  inlib::sg::add_image_item(m_gv,a_list,"export","document_export.jpg",exlib::out::action_main,action::pos_data(true,a_x,a_y));
+    inlib::sg::add_item(m_gv,a_list,"files",action::files,action::pos_data(m_screen_client,true,a_x,a_y));
+
+    inlib::sg::add_item(m_gv,a_list,"diaporama",action::diaporama,action::pos_data(m_screen_client,true,a_x,a_y));
+    inlib::sg::add_item(m_gv,a_list,"disable anim",inlib::sg::action_disable_anim);
+    inlib::sg::add_item(m_gv,a_list,"enable anim",inlib::sg::action_enable_anim);
+  //inlib::sg::add_item(m_gv,a_list,"show scene title",inlib::sg::action_show_scene_title,data);
+    inlib::sg::add_item(m_gv,a_list,"infos->console",inlib::sg::action_infos_in_console,data);
+    inlib::sg::add_item(m_gv,a_list,"console mag 2",inlib::sg::action_console_mag_two,data);
+  //inlib::sg::add_item(m_gv,a_list,"set menu screen",
+  //                    action::menu_screen_choose,cbk::menu_screen_data(m_screen_client,m_menu_col,m_menu_row,true,a_x,a_y));
+    inlib::sg::add_item(m_gv,a_list,"clear static scene",inlib::sg::action_clear_static_sg,data);
+    inlib::sg::add_item(m_gv,a_list,"clear dynamic scene",inlib::sg::action_clear_dynamic_sg,data);
+    inlib::sg::add_item(m_gv,a_list,"clear screen scene",inlib::sg::action_clear_screen_sg,data);
+    inlib::sg::add_item(m_gv,a_list,"view all",inlib::sg::action_adapt_camera_to_scene,data);
+    inlib::sg::add_item(m_gv,a_list,"light",inlib::sg::action_toggle_light,data);
+    inlib::sg::add_item(m_gv,a_list,"gsto",inlib::sg::action_toggle_gsto,data);
+  }
+public:
+  virtual inlib::sg::bcbk* copy() const {return new background_popup(*this);}
+public:
+  background_popup(screen_client& a_screen_client,inlib::sg::gui_viewer& a_gv,unsigned int& a_menu_col,unsigned int& a_menu_row)
+  :parent(inlib::sg::background::s_class(),0)
+  ,m_gv(a_gv)
+  ,m_screen_client(a_screen_client)
+  ,m_menu_col(a_menu_col)
+  ,m_menu_row(a_menu_row)
+  {}
+  virtual ~background_popup(){}
+protected:
+  background_popup(const background_popup& a_from)
+  :parent(a_from)
+  ,m_gv(a_from.m_gv)
+  ,m_screen_client(a_from.m_screen_client)
+  ,m_menu_col(a_from.m_menu_col)
+  ,m_menu_row(a_from.m_menu_row)
+  {}
+  background_popup& operator=(const background_popup& a_from){
+    parent::operator=(a_from);
+    return *this;
+  }
+protected:
+  inlib::sg::gui_viewer& m_gv;
+  screen_client& m_screen_client;
+  unsigned int& m_menu_col;
+  unsigned int& m_menu_row;
+};
+
+}
+
+//inlib_build_use kernel
+
+#endif

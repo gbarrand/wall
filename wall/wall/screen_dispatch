@@ -1,0 +1,481 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_screen_dispatch
+#define wall_screen_dispatch
+
+#include "screen_client"
+#include "dirit"
+#include "strings"
+
+#include <inlib/sg/gui_viewer>
+#include <inlib/wall/protocol>
+#include <inlib/sys/file>
+#include <inlib/sbeg>
+
+#include <inlib/sg/view_evd>
+
+#include "sg/image_grid" //EVT_USER_UPDATE_NODE
+
+namespace wall {
+
+inline void get_pos(screen_client& a_screen_client,
+                    float a_camera_height,                  
+                    int a_f_pos_x,int a_f_pos_y,
+                    float& a_x,float& a_y){
+  // a_f_pos_[x,y] is in local window coordinate
+  // (taking into account border).
+  int x = a_f_pos_x;
+  int y = a_f_pos_y; //y 0 = bottom
+  //in wall coords.
+  a_screen_client.cvt_local_to_all(x,y);
+  float f_x = float(x)/float(a_screen_client.m_all_ww); //ratio in wall coords.
+  float f_y = float(y)/float(a_screen_client.m_all_wh);
+  // we evaluate the border in WC.
+  float height = a_camera_height; //corrected with border.
+  float bh = float(a_screen_client.m_bh) * height/float(a_screen_client.m_wh);
+  height += 2*bh;
+  float h = height * a_screen_client.m_rows;
+  float w = a_screen_client.m_all_aspect * h;
+
+  a_x = w*(f_x-0.5F);
+  a_y = h*(f_y-0.5F);
+}
+
+inline bool is_beg(const std::string& a_s,const std::string& a_b,std::string& a_cmd,bool a_forward = true){
+  if(!inlib::is_beg(a_s,a_b,a_forward)) {a_cmd.clear();return false;}
+  if(a_s.size()<(a_b.size()+1)) {a_cmd.clear();return true;}
+  // a_s.size() >= a_b.size()+1 :
+  a_cmd = a_s.substr(a_b.size()+1,a_s.size()-(a_b.size()+1));
+  return true;
+}
+
+inline void screen_dispatch(inlib::sg::gui_viewer& a_gv,
+                            screen_client& a_screen_client,
+                            std::ostream& a_out,
+                            inlib::wall::event& a_event,
+                            bool& a_quit) {
+
+  if(a_event.type==inlib::wall::EVT_QUIT) {
+    a_quit = true;
+
+  } else if(a_event.type==inlib::wall::EVT_MOUSEMOTION) {
+    int x = a_event.motion.x;
+    int y = a_event.motion.y; //we expect y=0 is bottom
+    a_screen_client.cvt_all_to_local(x,y);
+    // x,y is now in local screen coord "within border".
+    // Then (0,0) is the bottom-left corner of local screen.
+    // x,y could be negative.
+
+    //update the pointer :
+    inlib::sg::base_camera* camera = a_gv.cursor_camera();
+    float hcam = camera?camera->near_height():2;
+    float cfx,cfy;
+    get_pos(a_screen_client,hcam,x,y,cfx,cfy);
+
+    //a_gv.out() << "wall::screen_dispatch : EVT_MOUSEMOTION :"
+    //  << " screen " << a_screen_client.index()
+    //  << ", event.motion " << a_event.motion.x << " " << a_event.motion.y
+    //  << ", local " << x << " " << y
+    //  << ", state " << (unsigned int)a_event.motion.state
+    //  << std::endl;
+
+    a_gv.set_cursor_position(cfx,cfy);
+
+//#define WALL_OLD_CURSOR_LOGIC
+#ifdef WALL_OLD_CURSOR_LOGIC
+    a_gv.cursor_visible = true;
+    if((a_event.motion.state & inlib::wall::MASK_MOUSEBUTTONDOWN)==inlib::wall::MASK_MOUSEBUTTONDOWN){
+      a_gv.touch_move(x,y);
+    }
+    a_gv.win_render();
+#else
+    if((a_event.motion.state & inlib::wall::MASK_MOUSEBUTTONDOWN)==inlib::wall::MASK_MOUSEBUTTONDOWN){
+      a_gv.cursor_visible = true;
+      if(a_gv.touch_move(x,y)) a_gv.win_render();
+    } else {
+      if(a_gv.is_cursor_visible()) {      
+        // render only the screen with the cursor in it (to optimize tile_image update if too much mouse motions).
+        a_gv.cursor_visible = true;
+        a_gv.win_render();
+      } else {
+        if(a_gv.cursor_visible.value()) {
+          //was visible :
+          a_gv.cursor_visible = false;
+          a_gv.win_render();
+        }
+      }
+    }
+#endif
+
+  } else if(a_event.type==inlib::wall::EVT_MOUSEBUTTONDOWN) {
+    int x = a_event.button.x;
+    int y = a_event.button.y; //we expect y=0 is bottom
+    a_screen_client.cvt_all_to_local(x,y);
+    //x,y could be negative. In win screen_client coords. y = 0 bottom.
+
+    if(a_gv.touch_down(x,y)) a_gv.win_render();
+
+  } else if(a_event.type==inlib::wall::EVT_MOUSEBUTTONUP) {
+    int x = a_event.button.x;
+    int y = a_event.button.y; //we expect y=0 is bottom
+    a_screen_client.cvt_all_to_local(x,y);
+    //x,y could be negative. In win screen_client coords. y = 0 bottom.
+
+    //a_out << "wall::screen_dispatch : MOUSEBUTTONUP"
+    //      << " server " << fx << " " << fy
+    //      << " win screen_client " << x << " " << y
+    //      << std::endl;
+
+    if(a_gv.touch_up(x,y)) a_gv.win_render();
+
+  } else if(a_event.type==inlib::wall::EVT_KEYDOWN) {
+    bool shift = false;
+    inlib::wall::mod state = a_event.key.keysym.mod;
+    if((state & inlib::wall::KMOD_LSHIFT) == inlib::wall::KMOD_LSHIFT)
+      shift = true;
+    if((state & inlib::wall::KMOD_RSHIFT) == inlib::wall::KMOD_RSHIFT)
+      shift = true;
+
+    /*
+    bool ctrl = false;
+    if((state & inlib::wall::KMOD_LCTRL) == inlib::wall::KMOD_LCTRL)
+      ctrl = true;
+    if((state & inlib::wall::KMOD_RCTRL) == inlib::wall::KMOD_RCTRL)
+      ctrl = true;
+    */
+
+    if(a_event.key.keysym.sym==inlib::wall::KEY_LEFT) {
+      a_gv.update_anim_motion(inlib::sg::anim_left,shift);
+      a_gv.win_render();
+    } else if(a_event.key.keysym.sym==inlib::wall::KEY_RIGHT) {
+      a_gv.update_anim_motion(inlib::sg::anim_right,shift);
+      a_gv.win_render();
+    } else if(a_event.key.keysym.sym==inlib::wall::KEY_UP) {
+      a_gv.update_anim_motion(inlib::sg::anim_up,shift);
+      a_gv.win_render();
+    } else if(a_event.key.keysym.sym==inlib::wall::KEY_DOWN) {
+      a_gv.update_anim_motion(inlib::sg::anim_down,shift);
+      a_gv.win_render();
+    } else if(a_event.key.keysym.sym==inlib::wall::KEY_ESCAPE) {
+      if(shift) {
+        a_gv.toggle_param_viewing();
+      } else {
+        a_gv.do_escape();
+      }
+      a_gv.win_render();
+    }
+
+  } else if(a_event.type==inlib::wall::EVT_USEREVENT) {
+    if(a_event.user.code==inlib::wall::EVT_USER_UPDATE_KEY_MOTION()){
+      unsigned short key = 0;
+      inlib::read_buffer<unsigned short>((char*)&(a_event.user.data1),key);
+      bool shift = false;
+      inlib::read_buffer<bool>((char*)&(a_event.user.data2),shift);
+
+      inlib::sg::anim_what anim = inlib::sg::anim_left;
+      if(key==inlib::sg::key_left)       anim = inlib::sg::anim_left;
+      else if(key==inlib::sg::key_right) anim = inlib::sg::anim_right;
+      else if(key==inlib::sg::key_up)    anim = inlib::sg::anim_up;
+      else if(key==inlib::sg::key_down)  anim = inlib::sg::anim_down;
+
+      a_gv.update_anim_motion(anim,shift);
+      a_gv.win_render();
+      
+      if(!a_screen_client.send(inlib::wall::EVT_USER_SYNC_MOVE())) {
+        a_gv.out() << "wall::screen_dispatch :"
+                   << " EVT_USER_UPDATE_KEY_MOTION :"
+                   << " send EVT_USER_SYNC_MOVE failed."
+                   << std::endl;
+        a_quit = true;
+      }
+
+    } else if(a_event.user.code==inlib::wall::EVT_USER_ANIM()){
+
+      inlib::atime _now(0,0);
+     {std::string s; //secs\nmicro_secs
+      read_event_string(a_event,s);
+      std::vector<std::string> ws;
+      inlib::words(s,"\n",false,ws);
+      if(ws.size()!=2) {}
+      inlib::atime::num_t secs;
+      if(!inlib::to(ws[0],secs)) {}
+      inlib::atime::num_t micro_secs;
+      if(!inlib::to(ws[1],micro_secs)) {}
+      _now = inlib::atime(secs,micro_secs);}
+
+      if(a_gv.treat_anim(_now)) a_gv.win_render();
+
+      if(!a_screen_client.send(inlib::wall::EVT_USER_SYNC_ANIM())) {
+        a_gv.out() << "wall::screen_dispatch :"
+                   << " EVT_USER_ANIM : send EVT_USER_SYNC_ANIM failed."
+                   << std::endl;
+        a_quit = true;
+      }
+
+    } else if(a_event.user.code==inlib::wall::EVT_USER_DOCUMENT()){
+
+      //a_out << "wall::screen_dispatch : debug"
+      //      << " EVT_USER_DOCUMENT() : 000"
+      //      << std::endl;
+      unsigned int length;
+      inlib::read_buffer<unsigned int>((char*)&(a_event.user.data1),length);
+      char* bufile = (char*)a_event.user.data2; //not 0.
+
+#ifdef INLIB_MEM
+      inlib::mem::decrement(inlib::s_new().c_str()); //bufile
+#endif
+
+      if(!a_gv.receive_document_buffer(bufile,length,inlib::wall::arg_sep())) a_quit = true;
+
+      delete [] bufile;
+
+    } else if(a_event.user.code==inlib::wall::EVT_USER_UPDATE_NODE()){
+
+      //a_out << "wall::screen_dispatch : debug"
+      //      << " EVT_USER_UPDATE_NODE() : 000"
+      //      << std::endl;
+
+      unsigned int length;
+      inlib::read_buffer<unsigned int>((char*)&(a_event.user.data1),length);
+      char* bufile = (char*)a_event.user.data2; //not 0.
+#ifdef INLIB_MEM
+      inlib::mem::decrement(inlib::s_new().c_str()); //bufile
+#endif
+      inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+      if(!_evd) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : not evd." << std::endl;
+        delete [] bufile;
+        return;
+      }
+
+      char* copt = inlib::str_dup(bufile);
+      std::string options(copt);
+      inlib::str_del(copt);
+
+      size_t lopt = options.size()+1;
+      size_t ldoc = length-lopt;
+      char* doc = bufile+lopt;
+
+      std::vector<std::string> opts; //should be <index>\n<count>\n<data_file> //see master_dispatch/UPDATE_NODE
+      inlib::words(options,"\n",false,opts);
+      if(opts.size()!=3) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : opts!=3." << std::endl;
+        delete [] bufile;
+        return;
+      }
+      unsigned int index;
+      if(!inlib::to(opts[0],index)) {}
+      unsigned int count;
+      if(!inlib::to(opts[1],count)) {}
+      const std::string& data_file = opts[2];
+
+      //::printf("debug : UPDATE_NODE : %d %d, data_file %s\n",index,count,data_file.c_str());
+
+      if(index!=a_screen_client.index()) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : index mismatch." << std::endl;
+        delete [] bufile;
+        return;
+      }
+
+      inlib::sg::separator& ssep = _evd->static_sg();
+      typedef sg::image_grid grid_t;
+      grid_t* _grid = inlib::sg::find_first_node_of_class<grid_t>(a_gv.out(),ssep);
+      if(!_grid) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : grid not found." << std::endl;
+        delete [] bufile;
+        return;
+      }
+      sg::tile_image* _image = _grid->find_IMAGE_NODE(count);
+      if(!_image) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : tile_image not found." << std::endl;
+        delete [] bufile;
+        return;
+      }
+
+      std::string bname;
+      inlib::base_name(_image->data_file.value(),bname);
+      if(bname!=data_file) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : data_file mismatch." << std::endl;
+        delete [] bufile;
+        return;
+      }
+
+      if(_image->buffer.size() && _image->columns.value() && _image->rows.value() ) {
+      //a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : discarded : already done." << std::endl;
+        //done (by a previous event)
+        delete [] bufile; 
+        return;
+      }
+
+      //::printf("debug : UPDATE_NODE : %d, data_file %s\n",count,_image->data_file.value().c_str());
+
+      unsigned int ihdu = 1;
+      unsigned int slice = 0;
+      if(!_image->load_doc(a_gv.out(),doc,ldoc,ihdu,slice)) {
+        a_out << "wall::screen_dispatch : EVT_USER_UPDATE_NODE : WARNING : load_doc() failed." << std::endl;
+        delete [] bufile; 
+        return;
+      }
+
+      a_gv.win_render();
+      delete [] bufile;
+
+    } else if(a_event.user.code==inlib::wall::EVT_USER_COMMAND()){
+
+      // from master that had received a data client request
+      // to be executed on all screens (remote wall control).
+      // See wall/master_sg_serv/sg_serv_treat_events.
+      // See inlib/cbk/sg_client.
+
+      std::string prot;
+      read_event_string(a_event,prot);
+
+      //a_out << "wall::screen_dispatch :"
+      //      << " EVT_USER_COMMAND() : prot " << inlib::sout(prot)
+      //      << std::endl;
+
+      std::string cmd;
+
+/*    unsigned action = 0;
+      if(a_gv.find_prot_action(prot,action)) { //see exlib/cbk/rwc_gui.
+        inlib::sg::gui_viewer::gui_cbk cbk(a_gv,action);
+        cbk.action();
+        a_gv.win_render();
+
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_toggle_cursor())) {
+        a_gv.cursor_visible = a_gv.cursor_visible.value()?false:true;
+        a_gv.win_render();
+
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_toggle_menu())) {
+        a_gv.activate_meta_zone();
+        a_gv.win_render();
+
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_hide_menu())) {
+        a_gv.hide_gui();
+        a_gv.win_render();
+
+      } else if(is_beg(prot,inlib::wall::protocol::s_rwc_diapo_start(),cmd)) {
+
+        inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+        if(!_evd) return;
+
+        // see inlib/cbk/rwc_diapo for the construction of the prot string.
+        // the below must be consistent with wall/master_dispatch
+        // and inlib/cbk/rwc_diapo.
+
+        std::vector<std::string> words;
+        inlib::words(cmd,"\n",false,words);        
+
+        unsigned int msecs = 40;
+        std::string what;
+        bool same = true; //same default as in inlib::cbk::base_diapo.
+        bool one_screen  = true;     
+        unsigned int nclear = 1;
+        float hcam = 2;
+
+        if(words.size()>=7){
+          if(!inlib::to<unsigned int>(words[1],msecs)) {}
+          what = words[3];
+          if(!inlib::to(words[4],same)) same = false;
+          if(!inlib::to(words[5],one_screen)) one_screen = true;
+          if(!inlib::to<unsigned int>(words[6],nclear)) {}
+          //hcam ?
+        }
+
+        std::string opts;
+        if(words.size()>=8) opts = words[7];
+        inlib::args aopts(opts,";",false);
+        //std::string scolor;        
+        //aopts.find(inlib::sg::s_back_color(),scolor);
+
+        dirit* _it = new dirit(a_gv.out(),false,a_gv,a_screen_client,same);
+
+        _evd->create_doc_anim(_it,a_gv.opener(),what,msecs,nclear,same,one_screen,hcam);
+
+        a_gv.win_render();
+
+    //} else if(inlib::is_beg
+    //            (prot,inlib::wall::protocol::s_rwc_diapo_stop())) {
+      } else if(inlib::is_beg(prot,"rwc_diapo_stop")) {
+
+        //NOTE : do nothing to keep compatibility
+        //       with existing old wall screen_client apps.
+        //       Wall screen_client app have to clear scene.
+
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_stop_cam_anim())) {
+        a_gv.stop_cam_anim();
+
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_get_params())){
+
+        typedef std::pair<std::string,std::string> arg;
+        std::vector<arg> args;
+        a_gv.m_params.get_in_args(args);
+
+        std::string _prot;
+        _prot = inlib::wall::protocol::s_rwc_get_params();
+
+        for(unsigned int index=0;index<args.size();index++) {
+          const std::string& lab = args[index].first;
+          const std::string& val = args[index].second;
+          _prot += "\n";
+          _prot += lab+"="+val;  //ready for inlib::args.
+        }
+        if(!a_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),_prot)) {}
+
+      } else*/
+
+      // used in file2wall.cpp :
+      if(is_beg(prot,inlib::wall::protocol::s_rwc_set_params(),cmd)){
+
+        // see exlib/cbk/rwc_gui for the construction of the prot string.
+
+        inlib::args args(cmd,"\n",false);
+
+        if(!a_gv.args2params(args.get_args(),false)) {}
+
+        a_gv.win_render();
+
+      } else if(is_beg(prot,inlib::wall::protocol::s_rwc_set_camera(),cmd)){
+
+        // see exlib/cbk/rwc_gui for the construction of the prot string.
+
+        inlib::args args(cmd,"\n",false);
+
+        if(!a_gv.args2camera(args.get_args(),false)) {}
+
+        a_gv.win_render();
+
+      // used in exlib/examples/py :
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_clear_static_scene())){
+        inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+        if(!_evd) return;
+        _evd->static_sg().clear();
+        a_gv.win_render();
+	
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_clear_dynamic_scene())){
+        inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+        if(!_evd) return;
+        _evd->dynamic_sg().clear();
+        a_gv.win_render();
+      
+      } else if(inlib::is_beg(prot,inlib::wall::protocol::s_rwc_clear_screen_scene())){
+        inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+        if(!_evd) return;
+        _evd->screen_sg().clear();
+        a_gv.win_render();
+      
+      } else {
+        a_out << "wall::screen_dispatch :"
+              << " unknwon EVT_USER_COMMAND() : " << inlib::sout(prot)
+              << std::endl;
+      }
+
+    }        
+  }
+}
+
+} //end namespace
+
+
+#endif

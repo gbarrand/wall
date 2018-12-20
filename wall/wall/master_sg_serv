@@ -1,0 +1,352 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_sg_serv
+#define wall_sg_serv
+
+#include <inlib/net/inet_socket>
+#include <inlib/sys/atime>
+
+class AcceptTag {
+public:
+  AcceptTag():m_timeout(10),m_start(0,0){}
+public:
+  inlib::atime::num_t m_timeout;  //milli secs
+  inlib::atime m_start;
+};
+
+inline bool accept_func(void* a_tag) {
+  AcceptTag& tag = *((AcceptTag*)a_tag);
+  if(inlib::atime::elapsed(tag.m_start).micro_seconds()>=tag.m_timeout) return false;
+  //a_out << "wall_master : accept_func secs " << secs << "." 
+  //      << std::endl;
+  //::sleep(1);
+  return true; //continue waiting for an accept.
+}
+
+inline bool look_for_data_client( 
+ std::ostream& a_out
+,const std::string& a_sg_serv_host
+,unsigned int a_sg_serv_port
+,unsigned int a_timeout //microsecs
+,inlib::net::inet_socket& a_data_server_sock
+,inlib::net::inet_socket& a_data_client_sock
+) {
+  if(!a_data_server_sock.bind(a_sg_serv_host,a_sg_serv_port,inlib::net::num_try(),1,true)) {
+    a_out << "wall : look_for_data_client :"
+          << " socket bind failed for " << inlib::sout(a_sg_serv_host)
+          << std::endl;
+    a_data_client_sock.disconnect();
+    return false;
+  }
+
+  int server_sock_id = a_data_server_sock.socket();
+
+  // wait a data client in a non blocking mode :
+
+  AcceptTag tag;
+  tag.m_timeout = a_timeout;
+  tag.m_start = inlib::atime::now();    
+  //accept_func is a timer.
+  a_data_client_sock.set_accept_func(accept_func,&tag);
+
+  if(!a_data_client_sock.accept(server_sock_id,false)) {
+    a_data_client_sock.disconnect();
+    a_data_server_sock.disconnect();
+    return false;
+  } 
+  if(!a_data_client_sock.is_connected()) {
+    a_out << "look_for_data_client :"
+          << " waited too long for a data client."
+          << std::endl;
+    a_data_client_sock.disconnect();
+    a_data_server_sock.disconnect();
+    return false;
+  }
+
+  return true;
+}
+
+#include "master_screens"
+#include <inlib/wall/protocol>
+
+inline bool bind_data_client(std::ostream& a_out,
+                             screens_t& a_screens, //for send_warn()
+                             const std::string& a_sg_serv_host,
+                             unsigned int a_sg_serv_port,
+                             inlib::net::inet_socket& a_data_server_sock,
+                             inlib::net::inet_socket& a_data_client_sock){
+
+  a_out << "bind_data_client : wait (30 secs) a data client ..." << std::endl;
+
+  if(!look_for_data_client(a_out,
+                           a_sg_serv_host,a_sg_serv_port,30000000,
+                           a_data_server_sock,a_data_client_sock)){
+    if(!send_warn(a_out,a_screens,"failed")){}
+    a_out << "bind_data_client : look for a data client failed." << std::endl;
+    return false;
+  }
+
+  a_out << "wall_master : get a data_client." << std::endl;
+
+  if(!a_data_client_sock.send_string(inlib::wall::protocol::s_start())) {
+    a_data_client_sock.disconnect();
+    a_data_server_sock.disconnect();
+    if(!send_warn(a_out,a_screens,"send start failed")){}
+    return false;
+  }
+
+  if(!send_warn(a_out,a_screens,"ok",false)){}
+  return true;
+}
+
+#include <inlib/sto>
+#include <inlib/press_func>
+#include <inlib/wall/strings>
+#include <inlib/sbeg>
+
+#include <sstream>
+namespace inlib {
+template <class T>
+inline std::string to(const T& a_v) {
+  std::ostringstream strm;
+  strm << a_v;
+  return strm.str();
+}
+}
+
+
+#include <inlib/net/sg_serv>
+inline bool sg_serv_dispatch(const std::string& a_prot,inlib::net::sg_serv& a_net_sg_serv,
+                                     screens_t& a_screens, 
+                                     inlib::decompress_func a_decompress_func,  
+                                     unsigned int a_ww,
+                                     unsigned int a_wh,
+                                     unsigned int a_bw,
+                                     unsigned int a_bh,
+                                     unsigned int a_cols,
+                                     unsigned int a_rows,
+                                     const std::string& a_doc_dir,
+                                     bool a_verbose) {
+  std::ostream& out = a_net_sg_serv.out();
+  inlib::net::inet_socket& a_sg_serv_client_sock = a_net_sg_serv.sg_client_sock();
+
+  //data client protocol :
+  if(inlib::is_beg(a_prot,inlib::wall::protocol::s_disconnect())) {
+    a_net_sg_serv.stop_sg_client();
+
+  } else if(inlib::is_beg(a_prot,inlib::wall::protocol::s_zdoc())) {
+
+    // The sender pending code is in inlib/net/sg_client::send_buffer_doc().
+
+    char* uc_buffer;
+    inlib::uint64 uc_length;
+    if(!a_net_sg_serv.receive_zdoc(a_decompress_func,uc_buffer,uc_length)) return false;
+
+    if(uc_length && uc_buffer) {
+      // received in screen_dispatch.
+      if(!send_buffer(out,a_screens,inlib::wall::EVT_USER_DOCUMENT(),uc_length,uc_buffer)) {
+        out << "wall_master::sg_serv_dispatch : send_buffer EVT_USER_DOCUMENT() failed." << std::endl;
+      }
+      if(a_verbose) {
+        out << "wall_master::sg_serv_dispatch :"
+            << " for prot " << inlib::sout(a_prot) << " :"
+            << " " << uc_length << " bytes sent."
+            << std::endl;
+      }
+    }
+    
+    delete [] uc_buffer;
+
+  //////////////////////////////////////////////////////////////////
+  /// See screen_dispatch for the treatment by each screen app. ////
+  //////////////////////////////////////////////////////////////////
+
+  } else if(inlib::is_beg(a_prot,inlib::wall::protocol::s_get_wall_params())) {
+
+    std::string _prot;
+    _prot = inlib::wall::protocol::s_get_wall_params();
+
+    _prot += "\n";
+    _prot += inlib::wall::s_ww()+"="+inlib::to(a_ww);
+    _prot += "\n";
+    _prot += inlib::wall::s_wh()+"="+inlib::to(a_wh);
+    _prot += "\n";
+    _prot += inlib::wall::s_bw()+"="+inlib::to(a_bw);
+    _prot += "\n";
+    _prot += inlib::wall::s_bh()+"="+inlib::to(a_bh);
+    _prot += "\n";
+    _prot += inlib::wall::s_cols()+"="+inlib::to(a_cols);
+    _prot += "\n";
+    _prot += inlib::wall::s_rows()+"="+inlib::to(a_rows);
+
+    if(!a_sg_serv_client_sock.send_string(_prot)) {
+      out << "wall_master::sg_serv_dispatch : fetch_string failed." << std::endl;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+/*
+  } else if(inlib::is_beg(a_prot,inlib::wall::protocol::s_rwc_event())) {
+
+    inlib::uint64 length;
+    if(!a_sg_serv_client_sock.fetch<inlib::uint64>(length)||!length) {
+      out << "wall_master::sg_serv_dispatch : fetch length failed." << std::endl;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+    char* buffer = new char[(size_t)length];
+    if(!buffer) {
+      out << "wall_master::sg_serv_dispatch : can't allocate " << length << " bytes." << std::endl;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+    if(!a_sg_serv_client_sock.fetch_buffer(buffer,length)) {
+      out << "wall_master::sg_serv_dispatch : fetch_buffer failed." << std::endl;
+      delete [] buffer;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+    if(!send<inlib::uint64>(out,a_screens,length)) {
+      out << "wall_master::sg_serv_dispatch : send<> failed." << std::endl;
+      delete [] buffer;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+    if(!send_buffer(out,a_screens,buffer,length)) {
+      out << "wall_master::sg_serv_dispatch : send_buffer failed." << std::endl;
+      //delete [] buffer;
+      //a_net_sg_serv.stop_sg_client();
+      //return false; //continue with remaining clients.
+    }
+
+    delete [] buffer;
+
+  } else if(inlib::is_beg(a_prot,inlib::wall::protocol::s_rwc_get_data_sub_dirs())) {
+
+    std::string from;
+    if(!a_sg_serv_client_sock.fetch_string(from)) {
+      out << "wall_master::sg_serv_dispatch : fetch_string failed." << std::endl;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+    std::string path = a_doc_dir;
+    if(from.size()) {
+      path += inlib::sep();
+      path += from;
+    }
+    std::vector<std::string> dirs;
+    inlib::dir::dirs(path,dirs,false); 
+
+    std::string stmp;
+    if(!inlib::nums2s<std::string>(dirs,stmp)) {}
+    if(!a_sg_serv_client_sock.send_string(stmp)) {
+      out << "wall_master::sg_serv_dispatch : fetch_string failed." << std::endl;
+      a_net_sg_serv.stop_sg_client();
+      return false;
+    }
+
+*/
+  } else if(inlib::is_beg(a_prot,inlib::wall::protocol::s_rwc())){
+
+    //used in inlib/app/file2wall.cpp
+    // See wall/screen_dispatch.
+    // See inlib/cbk/sg_client.
+
+    if(!send_command(out,a_screens,a_prot)) {
+      out << "wall_master::sg_serv_dispatch :"
+          << " send_command for " << inlib::sout(a_prot) << " failed."
+          << std::endl;
+      //a_net_sg_serv.stop_sg_client();
+      //return false; //continue with remaining clients.
+    }
+
+  ////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+
+  } else {
+
+    out << "wall_master::sg_serv_dispatch : unknown prot " << inlib::sout(a_prot) << "." << std::endl;
+
+  }
+
+  return true;
+}
+
+inline bool sg_serv_treat_events(inlib::net::sg_serv& a_net_sg_serv,
+                                     screens_t& a_screens, 
+                                     inlib::decompress_func a_decompress_func,  
+                                     unsigned int a_ww,
+                                     unsigned int a_wh,
+                                     unsigned int a_bw,
+                                     unsigned int a_bh,
+                                     unsigned int a_cols,
+                                     unsigned int a_rows,
+                                     const std::string& a_doc_dir,
+                                     bool a_verbose) {
+  std::ostream& out = a_net_sg_serv.out();
+  inlib::net::inet_socket& a_sg_serv_client_sock = a_net_sg_serv.sg_client_sock();
+  
+  bool have_input;
+  if(!a_sg_serv_client_sock.is_there_input(have_input)) {
+    out << "wall_master::sg_serv_treat_events : is_there_input failed." << std::endl;
+    a_net_sg_serv.stop_sg_client();
+    return false;
+  }
+
+  if(!have_input) return true;
+
+  std::string prot;
+  if(!a_sg_serv_client_sock.fetch_string(prot)) {
+    out << "wall_master::sg_serv_treat_events : fetch_string failed." << std::endl;
+    a_net_sg_serv.stop_sg_client();
+    return false;
+  }
+
+  if(a_verbose) {
+    out << "wall_master::sg_serv_treat_events : received prot " << inlib::sout(prot) << "." << std::endl;
+  }
+
+  return sg_serv_dispatch(prot,a_net_sg_serv,
+                              a_screens,a_decompress_func,  
+                              a_ww,a_wh,a_bw,a_bh,a_cols,a_rows,
+                              a_doc_dir,a_verbose);
+
+}
+
+inline void command_data_client_bind(std::ostream& a_out,const std::vector<std::string>& a_args,
+                                     screens_t& a_screens,const std::string& this_host,inlib::net::sg_serv& a_net_sg_serv) {
+  if(a_args.size()!=1) {
+    a_out << "command_data_client_bind : one arguments expected." << std::endl;
+    if(!send_string(a_out,a_screens,"bad command")){} //have to send something.
+    return;
+  }
+  const std::string& sport = a_args[0];
+  unsigned int _data_client_port;
+  if(!inlib::to<unsigned int>(sport,_data_client_port)){}
+
+  if(a_net_sg_serv.sg_client_sock().is_connected()) {
+    a_out << "command_data_client_bind : a data client is already connected." << std::endl;
+    if(!send_warn(a_out,a_screens,"already connected")){}
+  } else {
+    bind_data_client(a_out,
+                     a_screens,
+                     this_host,_data_client_port,
+                     a_net_sg_serv.data_server_sock(),
+                     a_net_sg_serv.sg_client_sock());
+  }
+}
+inline void command_data_client_disconnect(std::ostream& a_out,inlib::net::sg_serv& a_net_sg_serv) {
+  if(!a_net_sg_serv.sg_client_sock().is_connected()) return;
+  if(!a_net_sg_serv.sg_client_sock().send_string(inlib::wall::protocol::s_disconnect())) {}
+  a_out << "master : command_data_client_disconnect : disconnect data client." << std::endl;
+  a_net_sg_serv.stop_sg_client();
+}
+
+#endif

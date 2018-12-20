@@ -1,0 +1,32 @@
+<srvs>
+  <srv>
+    <name>0.0.0.0/54123</name>
+    <host>0.0.0.0</host>
+    <port>54123</port>
+  </srv>
+  <srv>
+    <name>Clermont</name>
+    <host>193.48.81.110</host>
+    <port>54123</port>
+  </srv>
+  <srv>
+    <name>LAL Cloud 40</name>
+    <host>134.158.75.40</host>
+    <port>23541</port>
+  </srv>
+  <srv>
+    <name>LAL Cloud 44</name>
+    <host>134.158.75.44</host>
+    <port>23541</port>
+  </srv>
+  <srv>
+    <name>My mac at LAL</name>
+    <host>134.158.91.139</host>
+    <port>54123</port>
+  </srv>
+  <srv>
+    <name>At home</name>
+    <host>192.168.0.16</host>
+    <port>54123</port>
+  </srv>
+</srvs>

@@ -1,0 +1,99 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_action_menu_screen
+#define wall_action_menu_screen
+
+#include <inlib/sg/simple_button> //before button_grid
+#include <inlib/sg/button_grid>
+#include <inlib/sg/gui_viewer>
+
+#include "../screen_client"
+
+namespace wall {
+namespace action {
+
+class menu_screen_data : public inlib::sg::pos_data {
+  typedef inlib::sg::pos_data parent;
+public:
+  menu_screen_data(screen_client& a_screen_client,unsigned int& a_menu_col,unsigned int& a_menu_row,bool a_popup,int a_ex,int a_ey)
+  :parent(a_popup,a_ex,a_ey)
+  ,m_screen_client(a_screen_client)
+  ,m_menu_col(a_menu_col)
+  ,m_menu_row(a_menu_row)
+  {}
+  virtual ~menu_screen_data(){}
+public:
+  menu_screen_data(const menu_screen_data& a_from)
+  :parent(a_from)
+  ,m_screen_client(a_from.m_screen_client)
+  ,m_menu_col(a_from.m_menu_col)
+  ,m_menu_row(a_from.m_menu_row)
+  {}
+  menu_screen_data& operator=(const menu_screen_data& a_from){
+    parent::operator=(a_from);
+    return *this;
+  }
+public:
+  screen_client& m_screen_client;
+  unsigned int& m_menu_col;
+  unsigned int& m_menu_row;
+};
+
+inline inlib::sg::return_action menu_screen_set(inlib::sg::gui_viewer& a_gv,
+                                                inlib::sg::button_grid<inlib::sg::simple_button>& a_widget,
+                                                const menu_screen_data& a_data) {
+  //a_gv.out() << " col " << a_widget.m_selected_col << std::endl;
+  //a_gv.out() << " row " << a_widget.m_selected_row << std::endl;
+
+  int col = a_widget.m_selected_col;
+  int row = a_widget.m_selected_row;
+  if((col==-1)||(row==-1)) return inlib::sg::return_none;
+
+  a_data.m_menu_col = (unsigned int)col;      
+  a_data.m_menu_row = (unsigned int)row;      
+  a_gv.ask_to_rebuild_gui();
+
+  return inlib::sg::return_to_render;
+}
+
+inline inlib::sg::return_action menu_screen_choose(inlib::sg::gui_viewer& a_gv,const menu_screen_data& a_data) {
+  // ask cols rows :
+
+  float wall_aspect = a_data.m_screen_client.m_all_aspect;
+  unsigned int cols = a_data.m_screen_client.m_cols;
+  unsigned int rows = a_data.m_screen_client.m_rows;
+
+  float wcw,wch;
+ {float tx,ty,aspect;      
+  a_gv.get_gui_wcw_wch(wcw,wch,tx,ty,aspect);}
+
+  inlib::sg::button_grid<inlib::sg::simple_button>* grid = new inlib::sg::button_grid<inlib::sg::simple_button>;
+  a_gv.set_colors(*grid);
+
+  // arrange so that grid does not overlap home buttons :
+  float gwidth = wcw*0.98f;
+  float gheight = gwidth/wall_aspect;
+ {float hbutton = wch/float(10);
+  float max_height = wch-4*hbutton;
+  if(gheight>max_height) {
+    float gaspect = gwidth/gheight;
+    gheight = max_height*0.98F;
+    gwidth = gheight*gaspect;
+  }}
+
+  grid->cols = cols;
+  grid->rows = rows;
+  grid->width = gwidth;
+  grid->height = gheight;
+
+  inlib::sg::add_callback(a_gv,*grid,menu_screen_set,a_data);
+
+  a_gv.show_widget(a_data,grid);
+
+  return inlib::sg::return_to_render;
+}
+
+}}
+
+#endif

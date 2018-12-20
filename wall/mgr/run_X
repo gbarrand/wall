@@ -1,0 +1,19 @@
+#!/bin/sh -f
+
+# It must be started with an absolute path in order
+# to get directory of app on the remote machines.
+
+app_dir=`dirname $0`
+
+if [ "${app_dir:0:1}" != "/" ] ; then
+  echo "The run script must be started with an absolute path."
+  exit
+fi
+
+args=""
+while test $# -ge 1 ; do
+  args="${args} $1"
+  shift
+done
+
+${app_dir}/run -X ${args}

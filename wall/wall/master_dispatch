@@ -1,0 +1,450 @@
+// Copyright (C) 2010, Guy Bind_arrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_master_dispatch
+#define wall_master_dispatch
+
+#include "master_screens"
+
+inline void command_send_to_clients(std::ostream& a_out,const std::vector<std::string>& a_args,
+                                    screens_t& a_screens) {
+  if(a_args.size()!=1) {
+    a_out << "master : command_send_to_client :"
+          << " one argument expected."
+          << std::endl;
+    if(!send_string(a_out,a_screens,"")){} //have to send something.
+    return;
+  }
+  if(!send_string(a_out,a_screens,a_args[0])){}
+}
+
+inline void command_get_per_client_file(std::ostream& a_out,const std::vector<std::string>& a_args,
+                                        screens_t& a_screens) {
+  if(a_args.size()!=1) {
+    a_out << "master : command_get_per_client_file :"
+          << " one argument expected."
+          << std::endl;
+    if(!send_string(a_out,a_screens,"")){} //have to send something.
+    return;
+  }
+  //unsigned int client_index = 0;
+  //if(!inlib::to<unsigned int>(words[1],client_index)) {}
+  std::vector<std::string> files;
+  inlib::words(a_args[0],";",false,files);
+  if(!send_loop_file(a_out,a_screens,inlib::wall::EVT_USER_FILE(),files)) {
+    a_out << "master : command_get_per_client_file :"
+          << " send files failed."
+          << std::endl;
+  }
+}
+
+#include "master_timers"
+#include <inlib/wall/strings>
+#include <inlib/sto>
+
+inline void command_timer_start(std::ostream& a_out,const std::vector<std::string>& a_args,
+                                anims_timer& a_anims_timer) {
+  if(a_args.size()<2) {
+    a_out << "master : command_timer_start :"
+          << " at least two arguments expected."
+          << std::endl;
+    return;
+  }
+
+  const std::string& sinterval = a_args[0];
+  const std::string& timer_action = a_args[1];
+
+  unsigned int interval;
+  if(!inlib::to<unsigned int>(sinterval,interval)) {
+    a_out << "master : command_timer_start :"
+          << " syntax error for interval " << inlib::sout(sinterval)
+          << ". An unsigned int is expected."
+          << std::endl;
+      
+  } else if(timer_action==inlib::wall::s_anims()) {
+    a_anims_timer.set_interval(interval);
+    if(a_anims_timer.active()) a_anims_timer.stop();
+    a_anims_timer.start();
+    
+  } else {
+    a_out << "master : command_timer_start :"
+          << " unknown timer action " << inlib::sout(timer_action)
+          << "."
+          << std::endl;
+  }
+}
+
+inline void command_timer_stop(std::ostream& a_out,const std::vector<std::string>& a_args,
+                               anims_timer& a_anims_timer) {
+  if(a_args.size()!=1) {
+    a_out << "master : command_timer_stop :"
+          << " one arguments expected."
+          << std::endl;
+    return;
+  }
+
+  const std::string& timer_action = a_args[0];
+  if(timer_action==inlib::wall::s_anims()) {
+    a_anims_timer.stop();
+  } else {
+    a_out << "master : command_timer_stop :"
+          << " unknown timer action " << inlib::sout(timer_action) << "."
+          << std::endl;
+  }
+}
+
+inline void command_get_time_now(std::ostream& a_out,screens_t& a_screens) {
+  inlib::atime _now = inlib::atime::now();            
+  std::string s;
+  if(!inlib::numas<inlib::atime::num_t>(_now.seconds(),s)) {}
+  s += "\n";
+  if(!inlib::numas<inlib::atime::num_t>(_now.micro_seconds(),s)) {}
+  if(!send_string(a_out,a_screens,s)){}
+}
+
+#include <inlib/dirmanip>
+
+inline void command_get_files(std::ostream& a_out,const std::vector<std::string>& a_args,
+                              screens_t& a_screens,
+                              const std::string& a_doc_dir) {
+  if(a_args.size()<1) {
+    a_out << "commang_get_files :"
+          << " one arguments expected."
+          << std::endl;
+    if(!send_string(a_out,a_screens,"")){} //have to send something.
+    return;
+  }
+
+  std::vector<std::string> exts;
+  inlib::words(a_args[0]," ",false,exts);
+
+  std::vector<std::string> dirs;
+  if(a_args.size()>=2) {
+    dirs.push_back(a_args[1]);
+  } else {
+    dirs.push_back(a_doc_dir);
+  }
+                
+  std::vector<std::string> paths;
+  inlib::get_files(a_out,dirs,exts,paths);
+  std::string stmp;
+  if(!inlib::nums2s<std::string>(paths,stmp)) {}
+  if(!send_string(a_out,a_screens,stmp)){}
+
+}
+
+inline void command_get_dirs(std::ostream& a_out,const std::vector<std::string>& a_args,
+                             screens_t& a_screens) {
+  if(a_args.size()!=1) {
+    a_out << "commang_get_dirs :"
+          << " one arguments expected."
+          << std::endl;
+    if(!send_string(a_out,a_screens,"")){} //have to send something.
+    return;
+  }
+  std::vector<std::string> dirs;
+  inlib::dir::dirs(a_args[0],dirs,true);
+  std::string stmp;
+  if(!inlib::nums2s<std::string>(dirs,stmp)) {}
+  if(!send_string(a_out,a_screens,stmp)){}
+} 
+
+inline void command_get_data_sub_dirs(std::ostream& a_out,const std::vector<std::string>& a_args,
+                                      screens_t& a_screens,
+                                      const std::string& a_doc_dir) {
+  if(a_args.size()!=1) {
+    a_out << "commang_get_data_sub_dirs :"
+          << " one arguments expected."
+          << std::endl;
+    if(!send_string(a_out,a_screens,"")){} //have to send something.
+    return;
+  }
+  const std::string& from = a_args[0];
+  std::string path = a_doc_dir;
+  if(from.size()) {
+    path += inlib::sep();
+    path += from;
+  }
+  std::vector<std::string> dirs;
+  inlib::dir::dirs(path,dirs,false); 
+  std::string stmp;
+  if(!inlib::nums2s<std::string>(dirs,stmp)) {}
+  if(!send_string(a_out,a_screens,stmp)){}
+}
+
+inline void command_get_data_files(std::ostream& a_out,screens_t& a_screens,const std::string& a_doc_dir) {
+  std::vector<std::string> files;
+  inlib::dir::entries(a_doc_dir,files,false); 
+  std::string stmp;
+  if(!inlib::nums2s<std::string>(files,stmp)) {}
+  if(!send_string(a_out,a_screens,stmp)){}
+}
+
+#include <inlib/wall/dump_event>
+
+inline void master_dispatch_EVT_USER_COMMAND(std::ostream& a_out,
+                            screens_t& a_screens,
+                            const std::string& a_action,const std::vector<std::string>& a_args,
+                            anims_timer& a_anims_timer,
+                            const std::string& a_doc_dir,
+                            bool& a_to_quit) {
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  if(a_action==inlib::wall::s_timer_start()) {
+    command_timer_start(a_out,a_args,a_anims_timer);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==inlib::wall::s_timer_stop()) {
+    command_timer_stop(a_out,a_args,a_anims_timer);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==s_get_files()) {
+    command_get_files(a_out,a_args,a_screens,a_doc_dir);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==s_send_to_clients()) {
+    command_send_to_clients(a_out,a_args,a_screens);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==s_get_doc_dir()) {
+
+    if(!send_string(a_out,a_screens,a_doc_dir)){}
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==inlib::wall::s_get_time_now()) {
+    command_get_time_now(a_out,a_screens);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==s_get_dirs()) {
+    command_get_dirs(a_out,a_args,a_screens);
+ 
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==s_get_data_sub_dirs()) {
+    command_get_data_sub_dirs(a_out,a_args,a_screens,a_doc_dir);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==s_get_data_files()) {
+    command_get_data_files(a_out,a_screens,a_doc_dir);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else if(a_action==inlib::wall::s_get_per_client_file()) {
+    command_get_per_client_file(a_out,a_args,a_screens);
+
+  /////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////
+  } else {
+    a_out << "master_dispatch_EVT_USER_COMMAND :"
+              << " unknown action " << inlib::sout(a_action) << "."
+              << std::endl;
+    a_to_quit = true;
+  }
+
+}
+
+#include <inlib/fmanip>
+
+inline void master_dispatch_EVT_USER_GET_FILE(std::ostream& a_out,screens_t& a_screens,
+                                              inlib::wall::event& a_event,const std::string& a_doc_dir) {
+  //a_out << "wall_master : master_dispatch_EVT_USER_GET_FILE." << std::endl;
+  std::string request;
+  read_event_string(a_event,request);
+  std::string path;
+  if(inlib::file::exists(request)) {
+    path = request;
+  } else {
+    std::vector<std::string> dirs;
+    dirs.push_back(a_doc_dir);
+    inlib::find_with_dirs(a_out,dirs,request,path);
+  }
+  if(!send_file(a_out,a_screens,inlib::wall::EVT_USER_FILE(),path)) {
+    a_out << "wall_master : master_dispatch_EVT_USER_GET_FILE :"
+          << " send " << inlib::sout(request) << " failed."
+          << std::endl;
+  }
+}
+
+#include <inlib/nomutex>
+#include <inlib/buffer_cache>
+#include <inlib/net/http>
+
+inline void master_dispatch_EVT_USER_GET_URL(std::ostream& a_out,screens_t& a_screens,
+                                             inlib::wall::event& a_event,std::string& a_cookie) {
+  //a_out << "wall_master : master_dispatch_EVT_USER_GET_URL." << std::endl;
+  //      << " EVT_USER_GET_URL() "
+  //      << std::endl;
+  //see wall::wget::get()
+  std::string request;
+  read_event_string(a_event,request);
+  std::string host;
+  unsigned int port;
+  std::string path;
+  if(!inlib::net::http::parse(request,host,port,path)) {
+    //return false;
+  }
+  //a_out << "wall_master : master_dispatch_EVT_USER_GET_URL :"
+  //      << " host " << inlib::sout(host) << " path " << inlib::sout(path) << std::endl;
+  inlib::net::http http(a_out,false); //false not verbose.
+  if(!http.start(host,port)) {
+    //return false;
+  }
+  char* buffer;
+  inlib::uint64 length;
+  std::string cookie;
+  if(!http.GET(path,a_cookie,buffer,length,cookie)) {
+    //return 0;
+  }
+  if(a_cookie.empty()) a_cookie = cookie;
+  if(!send_buffer(a_out,a_screens,inlib::wall::EVT_USER_FILE(),length,buffer)) {
+    a_out << "wall_master : master_dispatch_EVT_USER_GET_URL :"
+          << " send buffer failed."
+          << std::endl;
+  }
+  inlib::mdel(buffer);
+}
+
+inline void master_dispatch_EVT_USER_POST_URL(std::ostream& a_out,screens_t& a_screens,
+                                             inlib::wall::event& a_event,std::string& a_cookie) {
+  //a_out << "wall_master : master_dispatch_EVT_USER_POST_URL." << std::endl;
+  //      << " EVT_USER_POST_URL() "
+  //      << std::endl;
+  //see wall::wget::get()
+  std::string request;
+  read_event_string(a_event,request);
+  //a_out << "wall_master : master_dispatch_EVT_USER_POST_URL : request " << inlib::sout(request) << std::endl;
+  std::string host;
+  unsigned int port;
+  std::string path;
+  if(!inlib::net::http::parse(request,host,port,path)) {
+    //return false;
+  }
+  if(path.size()&&(path[0]=='/')) path = path.substr(1,path.size()-1);
+  //a_out << "wall_master : master_dispatch_EVT_USER_POST_URL :"
+  //      << " decoded : host " << inlib::sout(host) << ",port " << port << ", request " << inlib::sout(path) << std::endl;
+  inlib::net::http http(a_out,false); //false not verbose.
+  if(!http.start(host,port)) {
+    //return false;
+  }
+  char* buffer;
+  inlib::uint64 length;
+  std::string cookie;
+  if(!http.POST(path,a_cookie,buffer,length,cookie)) {
+    //return 0;
+  }
+  if(a_cookie.empty()) a_cookie = cookie;
+  if(!send_buffer(a_out,a_screens,inlib::wall::EVT_USER_FILE(),length,buffer)) {
+    a_out << "wall_master : master_dispatch_EVT_USER_POST_URL :"
+          << " send buffer failed."
+          << std::endl;
+  }
+  inlib::mdel(buffer);
+}
+
+inline void master_dispatch_EVT_USER_UPDATE_NODE(std::ostream& a_out,screens_t& a_screens,
+                                                 inlib::wall::event& a_event,
+                                             inlib::buffer_cache<inlib::nomutex>& a_cache,std::string& a_cookie) {
+  //a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE." << std::endl;
+  //      << " EVT_USER_UPDATE_NODE() "
+  //      << std::endl;
+
+  std::string ss;
+  read_event_string(a_event,ss);
+
+  //format : <client index>\n<node count>\nhttp://<host>:<port>/<request>
+
+  std::vector<std::string> words;
+  inlib::words(ss,"\n",false,words);
+  if(words.size()!=3) {
+    a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : three words expected." << std::endl;
+    return;
+  }
+
+  static const int none = -1;
+  int client_index = none;
+  if(!inlib::to<int>(words[0],client_index,none)) {
+    a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : bad format (not int)." << std::endl;
+    return;
+  }
+  if(client_index==none) {
+    a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : bad format (client index)." << std::endl;
+    return;
+  }
+
+  const std::string& scount = words[1];
+  const std::string& url = words[2];
+
+  std::string data_file;
+  inlib::base_name(url,data_file);
+
+  //::printf("debug : master_dispatch_EVT_USER_UPDATE_NODE : index %d, counde %s, file %s, url %s\n",
+  //         client_index,scount.c_str(),data_file.c_str(),url.c_str());
+
+  char* buffer = 0;
+  inlib::uint64 length = 0;
+  if(a_cache.find(url,buffer,length)) {
+  } else { //POST
+    std::string host;
+    unsigned int port;
+    std::string path;
+    if(!inlib::net::http::parse(url,host,port,path)) {
+      a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : bad format (http parse)." << std::endl;
+      return;
+    }
+    if(path.size()&&(path[0]=='/')) path = path.substr(1,path.size()-1);
+    //a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE :"
+    //      << " host " << inlib::sout(host) << " path " << inlib::sout(path) << std::endl;
+    inlib::net::http http(a_out,false); //false not verbose.
+    if(!http.start(host,port)) {
+      a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : bad format (http.start)." << std::endl;
+      return;
+    }
+    std::string cookie;
+    if(!http.POST(path,a_cookie,buffer,length,cookie)) {
+      a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : bad format (http.POST)." << std::endl;
+      return;
+    }
+    if(a_cookie.empty()) a_cookie = cookie;
+
+    a_cache.add(url,buffer,length);
+
+  } //POST
+
+  //::printf("debug : master_dispatch_EVT_USER_UPDATE_NODE : index %d, count %s, file %s\n",
+  //         client_index,scount.c_str(),data_file.c_str());
+
+  // the options string below must match what is in screen_dispath/UPDATE_NODE.
+  std::string options;
+  inlib::numas<unsigned int>(client_index,options);
+  options += "\n";
+  options += scount;
+  options += "\n";
+  options += data_file;
+
+  size_t lopt = options.size()+1; //include trailing null char.
+  char* cp_buffer = new char[lopt+length];
+  ::memcpy(cp_buffer,options.c_str(),lopt); //include trailing null char.
+  ::memcpy(cp_buffer+lopt,buffer,length);
+  inlib::uint64 cp_length = lopt+length;
+
+//if(!send_buffer(a_out,a_screens,inlib::wall::EVT_USER_UPDATE_NODE(),cp_length,cp_buffer)) {
+
+  if(!send_buffer_to_client(a_out,a_screens,client_index,inlib::wall::EVT_USER_UPDATE_NODE(),cp_length,cp_buffer)) {
+    a_out << "wall_master : master_dispatch_EVT_USER_UPDATE_NODE : send buffer failed." << std::endl;
+  }
+  delete [] cp_buffer;
+
+  a_cache.check_clear();
+}
+
+#endif

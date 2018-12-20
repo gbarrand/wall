@@ -1,0 +1,21 @@
+#!/bin/sh -f
+
+#set -x
+
+screen_host=Administrateur@134.158.89.134
+
+psexec=/home/Administrateur/private/barrand/bin/DOS/PsExec.exe
+
+run_what="${psexec} -s -i 'C:\CYGWIN\usr\local\wall\1.12\bin\wall_screen_Windows.exe' -verbose=1 -master=134.158.90.103 -port=50730 -full_screen=0 -monitor=0 -cols=1 -rows=1 -col=0 -row=0 -border_width=0 -border_height=0 -window_x=0 -window_y=0 -window_width=800 -window_height=400 -menu_col=0 -menu_row=0 -window_no_decorations=0"
+
+#run_what="${psexec} -s -i 'C:\CYGWIN\usr\local\ioda\1.6\bin\ioda.exe' -land"
+
+#run_what="${psexec} -s -i notepad"
+
+run_cmd='ssh -f ${screen_host}'
+run_cmd="${run_cmd} \"${run_what}\""
+
+#echo "debug : ${run_cmd}"
+#exit
+
+eval ${run_cmd}

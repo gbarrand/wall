@@ -1,0 +1,62 @@
+
+mac_arts=134.158.76.71
+mac_pro1=134.158.76.186
+#mac_pro2=134.158.76.187
+#mac_pro3=134.158.76.188
+#mac_pro4=134.158.76.189
+
+  cols=1;rows=1
+
+  window_width=1920
+  window_height=1200
+  #window_height=1199 # if win "no deco" done with "override redirect".
+
+  border_width=88
+  border_height=100
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=1500
+
+  # machines : 1 2 3 4
+  #row = 0 (bottom)
+  screen_hosts[0]=screenwall@${mac_pro1}
+
+  run_screens[0]=${run_cmd}
+
+  rs='1'
+  cs='1'
+
+  # with X11, on one machine there is one XDisplay for the two screens,
+  # then we can't set full_screen=1. We set explicitly
+  # window_width, window_height to the size of one screen
+  # and adapt window_y per application so that each application
+  # window is at top-left corner of a screen. We ask also
+  # that application windows be not decorated.
+
+  win_x[0]=0
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    win_y[0]=0
+  else
+    win_y[0]=${window_height}
+  fi
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    if [ ${swap_monitor} = "yes" ] ; then
+      monitors[0]=1
+    else
+      monitors[0]=0
+    fi
+  else
+    monitors[0]=0
+  fi
+
+  if [ ${run_cocoa} = "yes" ] ; then
+    full_screens[0]=1
+  else
+    full_screens[0]=0
+
+    xdisplay_1=`ssh screenwall@${mac_pro1} ${app_dir}/find_DISPLAY`
+
+    x11_displays[0]=${xdisplay_1}
+  fi
+
+  window_no_decorations=1

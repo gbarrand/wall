@@ -1,0 +1,329 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_wall_action_exas
+#define wall_wall_action_exas
+
+//#include <inlib/exa/hrand>
+//#include <inlib/exa/fit>
+//#include <inlib/exa/plots>
+#include <inlib/exa/snow>
+#include <inlib/exa/angry_cube>
+#include <inlib/exa/shapes>
+#include <inlib/exa/valop>
+//#include <inlib/exa/gui>
+#include <inlib/exa/text>
+#include <inlib/exa/plots>
+#include <inlib/exa/create>
+#include <inlib/exa/files>
+#include <inlib/exa/polyhedron>
+
+#include <exlib/exa/lal>
+#include <exlib/exa/text_marker>
+#include <exlib/exa/healpix>
+#include <exlib/cbk/astro>
+//#include <exlib/exa/create>
+
+#include <exlib/sg/lhc1>
+
+#include <inlib/cbk/astro>
+
+#include "../sg/image_grid"
+
+#include "pos_data"
+#include "../w2master" //lhc1
+#include "../sg/wproxy"
+
+#include "../view_astro"
+#include <inlib/pimg>
+#include <inlib/buf2lines>
+
+#include <inlib/sg/view_evd>
+
+namespace wall {
+namespace action {
+
+INLIB_GLOBAL_STRING(get_from_home)
+
+inline inlib::sg::return_action _action_pimg(inlib::sg::gui_viewer& a_gv,const pos_data& a_data,const std::string& a_name){
+
+  inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+  if(!_evd) return inlib::sg::return_none;
+  inlib::sg::view_astro* _vastro = inlib::sg::cast_view_astro(a_gv);
+  if(!_vastro) return inlib::sg::return_none;
+
+  std::string data_dir;
+  //a_gv.first_data_dir(data_dir);
+  data_dir = a_gv.res_dir();
+
+  const std::string& host = _vastro->host();
+  unsigned int port = _vastro->port();
+
+  inlib::wget* wget_params = new wall::w2master(a_data.m_screen_client);
+
+  std::vector<std::string> lines;
+ {std::string sep = "/"; //if repserv running on a UNIX.
+  std::string cmd;
+  cmd += s_get_from_home();
+  cmd += " ";
+  cmd += sep+"Documents"+sep+"repserv"+sep+a_name+sep+"params";
+  char* doc;inlib::uint64 ldoc;
+  //NOTE : doc should be deleted with [].
+  std::string icookie;
+  std::string ocookie;
+  if(!wget_params->post(host,port,"cmd="+cmd,doc,ldoc,icookie,ocookie)) {
+    a_gv.map_warn("get remote params failed.");
+    return inlib::sg::return_to_render;     
+  }
+  inlib::buf2lines(doc,lines); //it is assumed that doc finished with 0.
+  delete [] doc;}
+
+  float ra,dec;
+  inlib::lut<float> lut;
+  inlib::SOPI::cmap cmap(0);
+  double mn,mx,mean,rms;
+  unsigned int start_level;
+  if(!inlib::pimg::get_params(lines,ra,dec,lut,cmap,mn,mx,mean,rms,start_level)) {
+    a_gv.pop_warn(a_data,"params parse failed.");
+    return inlib::sg::return_to_render;     
+  }
+
+  if(!_evd->is_evd()) {
+    _evd->create_sg_evd();
+    _evd->replace_camera(a_gv.create_2D_camera(2));
+  }
+  a_gv.set_plane_viewer(true);
+
+  double sky_radius = inlib::default_sky_radius();
+
+  inlib::sg::base_camera* _cam = inlib::sg::astro_pimg_camera(a_gv,sky_radius);
+
+  inlib::sg::separator& dsep = _evd->static_sg();
+  //dsep.clear();
+
+  inlib::sg::separator* sep = new inlib::sg::separator;
+
+  inlib::sg::infos* infos = new inlib::sg::infos;
+  infos->add_title(a_name);
+  sep->add(infos);
+
+  inlib::sg::rgba* mat = new inlib::sg::rgba();
+  mat->color = inlib::colorf_black(); // To avoid a white flash when changing level.
+  sep->add(mat);
+     
+  inlib::wget* wget_simbad = new wall::w2master(a_data.m_screen_client);
+
+  //wall::wget* wget_fits = new wall::wget(a_data.m_screen_client); //bad idea. Clash with sg::selection checked pick.
+
+  //inlib::wget* wget_fits = new inlib::net::wget(a_gv.out());
+  std::string proxy_host = a_data.m_screen_client.master_host();
+  unsigned int proxy_port = inlib::proxy_port();
+  wall::sg::wproxy* wget_fits = new wall::sg::wproxy(a_gv.out(),proxy_host,proxy_port);
+    
+  typedef sg::image_grid grid_t;
+
+  grid_t* _grid = new grid_t(a_gv,
+                             *wget_simbad,
+                             *wget_params,*wget_fits,host,port,data_dir,
+                             lut,cmap,mn,mx,mean,rms,a_data.m_screen_client);
+  _grid->modeling_scale_factor = start_level;
+  _grid->name = a_name;
+  _grid->sky_radius = sky_radius;
+  _grid->stars_radius = inlib::default_stars_radius();
+  sep->add(_grid);
+
+  sep->add(new inlib::sg::holder<inlib::wget>(wget_simbad)); // to delete wget_simbad.
+  sep->add(new inlib::sg::holder<inlib::wget>(wget_params)); // to delete wget_params.
+  sep->add(new inlib::sg::holder<inlib::wget>(wget_fits));   // to delete wget_fits.
+
+  dsep.add(sep);
+
+  a_gv.enable_anim();
+
+  bool camera_in_front = true;
+  if(camera_in_front && a_gv.scene_camera()) _cam->astro_orientation(ra,dec);
+
+  _evd->replace_camera(_cam);
+
+  if(!a_data.m_popup) a_gv.hide_main_menu();
+
+  a_gv.num2console(_grid->modeling_scale_factor.value());
+
+  return inlib::sg::return_to_render;
+}
+
+#define WALL_CBK_ACTION_PIMG(a__name,a__dir) \
+inline inlib::sg::return_action action_##a__name(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {\
+  return _action_pimg(a_gv,a_data,#a__dir);\
+}
+
+WALL_CBK_ACTION_PIMG(CFHTLS_1_pfits,CFHTLS_1.pfits)
+WALL_CBK_ACTION_PIMG(M51_large_pfits,M51_large.pfits)
+//WALL_CBK_ACTION_PIMG(sky_40_pfits,sky_40.pfits)
+
+#undef WALL_CBK_ACTION_PIMG
+
+inline inlib::sg::return_action action_some_pimg(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  inlib::sg::list* list = new inlib::sg::list(a_gv.ttf());
+  a_gv.set_style(*list);
+
+  inlib::sg::view_astro* _vastro = inlib::sg::cast_view_astro(a_gv);
+  if(_vastro) {
+    typedef inlib::sg::return_action (*func)(inlib::sg::gui_viewer&,const inlib::sg::pos_data&);
+    inlib::sg::add_white_item<func,inlib::sg::pos_data>
+      (a_gv,*list,"Set host ("+_vastro->host()+")",inlib::cbk::action_pimg_host,a_data);
+  }
+
+  inlib::sg::add_white_item(a_gv,*list,"CFHTLS_1.pfits",action_CFHTLS_1_pfits,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"M51_large.pfits",action_M51_large_pfits,a_data);
+//inlib::sg::add_white_item(a_gv,*list,"sky_40.pfits",action_sky_40_pfits,a_data);
+
+  a_gv.show_widget(a_data,list);
+  return inlib::sg::return_to_render;
+}
+
+/*
+inline inlib::sg::return_action action_lhc1(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  inlib::sg::view_evd* _evd = inlib::sg::cast_view_evd(a_gv);
+  if(!_evd) return inlib::sg::return_none;
+
+  inlib::atime _now(0,0);
+  if(!a_gv.get_time_now(_now)) {
+    a_gv.pop_warn(a_data,"get_time_now() failed");
+    return inlib::sg::return_to_render;
+  }
+
+  if(!_evd->is_evd()) {
+    _evd->create_sg_evd();
+    _evd->replace_camera(a_gv.create_2D_camera(2));
+  }
+  a_gv.set_plane_viewer(true);
+
+  inlib::sg::separator& dsep = _evd->static_sg();
+  //dsep.clear();
+
+  inlib::sg::separator* sep = new inlib::sg::separator;
+
+  inlib::sg::infos* infos = new inlib::sg::infos;
+  infos->add_title("LHC status");
+  sep->add(infos);
+
+  inlib::sg::matrix* tsf = new inlib::sg::matrix;
+  sep->add(tsf);
+
+  inlib::sg::rgba* mat = new inlib::sg::rgba();
+  mat->color = inlib::colorf_white();
+  sep->add(mat);
+     
+  wall::w2master* wget = new wall::w2master(a_data.m_screen_client); //lhc1 does a get()
+
+  exlib::sg::lhc1* node = new exlib::sg::lhc1(*wget,_now);
+  //node->show_border = true;
+  node->expand = true;
+  node->time_interval = 20000;
+  node->load_first_image();
+  sep->add(node);
+
+  sep->add(new inlib::sg::holder<wall::w2master>(wget)); // to delete wget.
+
+  dsep.add(sep);
+
+  a_gv.enable_anim();
+
+  if(!a_data.m_popup) a_gv.hide_main_menu();
+
+  return inlib::sg::return_to_render;
+}
+*/
+
+#define WALL_CBK_ASTRO_ACTION_GET_STAR(a__name) \
+inline inlib::sg::return_action get_##a__name(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {\
+  return exlib::astro::get_##a__name(a_gv);\
+}
+
+WALL_CBK_ASTRO_ACTION_GET_STAR(M51)
+WALL_CBK_ASTRO_ACTION_GET_STAR(M82)
+WALL_CBK_ASTRO_ACTION_GET_STAR(M104)
+WALL_CBK_ASTRO_ACTION_GET_STAR(M63)
+WALL_CBK_ASTRO_ACTION_GET_STAR(M106)
+WALL_CBK_ASTRO_ACTION_GET_STAR(NGC6543)
+WALL_CBK_ASTRO_ACTION_GET_STAR(Sgr_A_star)
+WALL_CBK_ASTRO_ACTION_GET_STAR(0_90)
+WALL_CBK_ASTRO_ACTION_GET_STAR(270_0)
+WALL_CBK_ASTRO_ACTION_GET_STAR(90_45)
+//WALL_CBK_ASTRO_ACTION_GET_STAR(M42)
+//WALL_CBK_ASTRO_ACTION_GET_STAR(Alnilam)
+
+#undef WALL_CBK_ASTRO_ACTION_GET_STAR
+
+
+inline inlib::sg::return_action action_some_STSCI(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  inlib::sg::list* list = new inlib::sg::list(a_gv.ttf());
+  a_gv.set_style(*list);
+
+  inlib::sg::add_white_item(a_gv,*list,"M51",get_M51,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"M82",get_M82,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"M104",get_M104,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"M63",get_M63,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"M106",get_M106,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"NGC6543",get_NGC6543,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"Sgr A*",get_Sgr_A_star,a_data);
+//inlib::sg::add_white_item(a_gv,*list,"M42",get_M42,a_data);         //lengthy
+//inlib::sg::add_white_item(a_gv,*list,"Alnilam",get_Alnilam,a_data); //lengthy
+  inlib::sg::add_white_item(a_gv,*list,"0 90",get_0_90,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"270 0",get_270_0,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"90 45",get_90_45,a_data);
+
+  a_gv.show_widget(a_data,list);
+  return inlib::sg::return_to_render;
+}
+
+inline inlib::sg::return_action exas(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  inlib::sg::list* list = new inlib::sg::list(a_gv.ttf());
+  a_gv.set_style(*list);
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////
+  /// inlib : ////////////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////////////////////////
+  //the below exa get files in the local machines "res" dir.
+  inlib::sg::add_image_item(a_gv,*list,"ATLAS","ioda_atlas.jpg",inlib::exa::povama);
+
+  inlib::sg::add_white_item(a_gv,*list,"Some STSCI (net needed)...",action_some_STSCI,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"Some pimg (net needed)...",action_some_pimg,a_data);
+  inlib::sg::add_white_item(a_gv,*list,"add equator",inlib::cbk::action_add_equator);
+  inlib::sg::add_white_item(a_gv,*list,"delete equator",inlib::cbk::action_delete_equator);
+
+//inlib::sg::add_image_item(a_gv,*list,"shapes","ioda_cube.jpg",inlib::exa::shapes); //not with empty-scene logic.
+  inlib::sg::add_white_item(a_gv,*list,"angry cube",inlib::exa::angry_cube);
+  inlib::sg::add_white_item(a_gv,*list,"snow",inlib::exa::snow);
+  inlib::sg::add_image_item(a_gv,*list,"zvid","zvid.jpg",inlib::exa::zvid);
+  inlib::sg::add_image_item(a_gv,*list,"slides","video_proj.jpg",inlib::exa::slides);
+  inlib::sg::add_white_item(a_gv,*list,"create node",inlib::exa::create_node,inlib::sg::pos_data(a_data));
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////
+  /// exlib : ////////////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////////////////////////
+  inlib::sg::add_white_item(a_gv,*list,"HEALPix of CMB",exlib::exa::healpix);
+  inlib::sg::add_image_item(a_gv,*list,"LAL","logo_lal_512_1024.jpg",exlib::exa::lal);
+
+  //the three below needs the stixgeneral.otf font.
+  inlib::sg::add_white_item(a_gv,*list,"text marker",exlib::exa::text_marker);
+  inlib::sg::add_white_item(a_gv,*list,"stix text",inlib::exa::stix_text);
+  inlib::sg::add_white_item(a_gv,*list,"formulas",inlib::exa::formulas,inlib::sg::pos_data(a_data));
+  inlib::sg::add_white_item(a_gv,*list,"plot surface",inlib::exa::plots,inlib::sg::pos_data(a_data));
+
+  inlib::sg::add_white_item(a_gv,*list,"polyhedron",inlib::exa::polyhedron);
+//inlib::sg::add_white_item(a_gv,*list,"exlib create node",exlib::exa::create_node,a_data);
+
+//inlib::sg::add_white_item(a_gv,*list,"LHC status (net needed)",action_lhc1,a_data);
+
+  // NOTE : rand not the same on all machines !
+//inlib::sg::add_white_item(a_gv,*list,"h/rand",inlib::exa::hrand);
+
+  a_gv.show_widget(a_data,list);
+  return inlib::sg::return_to_render;
+}
+
+}}
+
+#endif

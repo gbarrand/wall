@@ -1,0 +1,405 @@
+#!/bin/bash -f
+
+# bash and not sh because of let.
+
+# It must be started with an absolute path in order
+# to get directory of app on the remote machines.
+
+app_dir=`dirname $0`
+
+if [ "${app_dir:0:1}" != "/" ] ; then
+  echo "This script must be started with an absolute path."
+  exit
+fi
+
+#///////////////////
+#// args : /////////
+#///////////////////
+
+run_verbose_client=0
+document=
+
+run_set_x=no
+
+run_cocoa=no
+run_windows=no
+if [ `uname` = Darwin ] ; then
+  run_cocoa=yes
+else
+  if [ "`uname | grep CYGWIN`" != "" ] ; then run_windows=yes; fi
+  if [ "`uname -r | grep Microsoft`" != "" ] ; then run_windows=yes; fi
+fi
+
+run_config=
+run_debug=no
+
+run_master=yes
+run_master_verbose=0
+run_master_only=no
+run_master_debug=no
+run_master_cocoa=no
+run_master_control_width=
+run_master_data_client_port=50800
+
+#run_proxy=yes
+run_proxy=no
+run_proxy_verbose=
+#run_proxy_verbose=-verbose
+
+swap_monitor=no
+run_get_infos=no
+run_kill_proc=no
+
+menu_col=0
+menu_row=0
+
+while test $# -ge 1 ; do
+  case $1 in
+    -v) run_master_verbose=1;run_verbose_client=1;;
+    -X) run_cocoa=no;;
+    -x11) run_cocoa=no;;
+
+    -cv) run_verbose_client=1;;
+
+    -mv)    run_master_verbose=1;;
+    -mcoc)  run_master_cocoa=yes;;
+    -mg)    run_master_debug=yes;;
+    -mno)   run_master=no;;
+    -monly) run_master_only=yes;;
+    -mww) 
+        shift
+        if [ $# != 0 ] ; then
+          run_master_control_width=$1  
+        else         
+          echo "give an uint after the -mww option."
+          exit 
+        fi ;;
+    
+
+    -swap)  swap_monitor=yes;;
+    -g)     run_debug=yes;;
+    -infos) run_get_infos=yes;;
+    -kill)  run_kill_proc=yes;;
+    -one)   run_config='11';;
+
+    -mdc_port) 
+        shift
+        if [ $# != 0 ] ; then
+          run_master_data_client_port=$1
+        else         
+          echo "give a port number after the -mdc_port option."
+          exit 
+        fi ;;
+    
+    -config) 
+        shift
+        if [ $# != 0 ] ; then
+          run_config=$1  
+        else         
+          echo "give a config name after the -config option."
+          exit 
+        fi ;;
+    -menu_col) 
+        shift
+        if [ $# != 0 ] ; then
+          menu_col=$1  
+        else         
+          echo "give an uint after the -menu_col option."
+          exit 
+        fi ;;
+    -menu_row) 
+        shift
+        if [ $# != 0 ] ; then
+          menu_row=$1  
+        else         
+          echo "give an uint after the -menu_row option."
+          exit 
+        fi ;;
+    
+    -x) run_set_x=yes;;
+
+    -*) echo "unknwon option : $1" ; exit ;;
+     *) if [ $# = 1 ] ; then
+          document=$1
+        else         
+          echo "run : unknwon option : $1"
+          exit
+        fi
+        ;;
+  esac
+  shift
+done
+
+#///////////////////
+#///////////////////
+#///////////////////
+if [ ${run_set_x} = "yes" ] ; then set -x; fi
+
+if [ ${run_kill_proc} = "yes" ] ; then
+  ${app_dir}/kill_proc wall_
+#  exit
+fi
+
+if [ "${run_master}" = "yes" ] ; then
+procs=`ps ax | grep wall_ | grep -v wall_proxy | grep -v grep`
+if [ "${procs}" != "" ] ; then
+  echo "kill existing wall processes."
+  #echo ${procs}
+  ps ax | grep wall_ | grep -v grep | awk '{print $1;}'
+  echo "you can use : ./kill_proc wall_"
+  exit
+fi
+fi
+
+#///////////////////////////////////////
+#///////////////////////////////////////
+#///////////////////////////////////////
+if [ "${run_config}" = "win_12" ] ; then
+  run_windows=yes
+fi
+#///////////////////////////////////////
+#// command to run a screen program : //
+#///////////////////////////////////////
+
+master_bin_dir="${app_dir}"
+screen_bin_dir="${app_dir}"
+
+if [ ${run_cocoa} = "yes" ] ; then
+
+  run_cmd_dbg='export WALL_SCREEN_VERBOSE=${run_verbose_client};export WALL_SCREEN_MASTER=${master_host};export WALL_SCREEN_PORT=${port};export WALL_SCREEN_FULL_SCREEN=${full_screen};export WALL_SCREEN_MONITOR=${monitor};export WALL_SCREEN_COLS=${cols};export WALL_SCREEN_ROWS=${rows};export WALL_SCREEN_COL=${col};export WALL_SCREEN_ROW=${row};export WALL_SCREEN_BORDER_WIDTH=${border_width};export WALL_SCREEN_BORDER_HEIGHT=${border_height};export WALL_SCREEN_WINDOW_X=${window_x};export WALL_SCREEN_WINDOW_Y=${window_y};export WALL_SCREEN_WINDOW_WIDTH=${window_width};export WALL_SCREEN_WINDOW_HEIGHT=${window_height};export WALL_SCREEN_MENU_COL=${menu_col};export WALL_SCREEN_MENU_ROW=${menu_row};export WALL_SCREEN_WINDOW_NO_DECORATIONS=${window_no_decorations};gdb ${screen_bin_dir}/wall_screen_Cocoa'
+
+#  run_app="${screen_bin_dir}/wall_screen_Cocoa 1> /dev/null 2> /dev/null"
+  run_app="${screen_bin_dir}/wall_screen_Cocoa"
+
+  run_what='export WALL_SCREEN_VERBOSE=${run_verbose_client};export WALL_SCREEN_MASTER=${master_host};export WALL_SCREEN_PORT=${port};export WALL_SCREEN_FULL_SCREEN=${full_screen};export WALL_SCREEN_MONITOR=${monitor};export WALL_SCREEN_COLS=${cols};export WALL_SCREEN_ROWS=${rows};export WALL_SCREEN_COL=${col};export WALL_SCREEN_ROW=${row};export WALL_SCREEN_BORDER_WIDTH=${border_width};export WALL_SCREEN_BORDER_HEIGHT=${border_height};export WALL_SCREEN_WINDOW_X=${window_x};export WALL_SCREEN_WINDOW_Y=${window_y};export WALL_SCREEN_WINDOW_WIDTH=${window_width};export WALL_SCREEN_WINDOW_HEIGHT=${window_height};export WALL_SCREEN_MENU_COL=${menu_col};export WALL_SCREEN_MENU_ROW=${menu_row};export WALL_SCREEN_WINDOW_NO_DECORATIONS=${window_no_decorations};${run_app}'
+
+  run_cmd='ssh -f ${screen_host}'
+  run_cmd="${run_cmd} \"${run_what}\""
+
+  run_local_cmd="${run_what} &"
+
+else
+
+  if [ ${run_windows} = "yes" ] ; then
+
+    run_what='${screen_bin_dir}/wall_screen_Windows.exe -verbose=${run_verbose_client} -master=${master_host} -port=${port} -full_screen=${full_screen} -monitor=${monitor} -cols=${cols} -rows=${rows} -col=${col} -row=${row} -border_width=${border_width} -border_height=${border_height} -window_x=${window_x} -window_y=${window_y} -window_width=${window_width} -window_height=${window_height} -menu_col=${menu_col} -menu_row=${menu_row} -window_no_decorations=${window_no_decorations}'
+
+    run_cmd='ssh -f ${screen_host}'
+    run_cmd="${run_cmd} \"${run_what}\""
+
+    run_local_cmd="${run_what} &"
+
+  else
+
+    run_what='export DISPLAY=${x11_display};${screen_bin_dir}/wall_screen_X11 -verbose=${run_verbose_client} -master=${master_host} -port=${port} -full_screen=${full_screen} -monitor=${monitor} -cols=${cols} -rows=${rows} -col=${col} -row=${row} -border_width=${border_width} -border_height=${border_height} -window_x=${window_x} -window_y=${window_y} -window_width=${window_width} -window_height=${window_height} -menu_col=${menu_col} -menu_row=${menu_row} -window_no_decorations=${window_no_decorations}'
+
+# 1> /tmp/out.log${col}
+
+    run_cmd='ssh -f ${screen_host}'
+    run_cmd="${run_cmd} \"${run_what}\""
+
+    run_local_cmd="${run_what} &"
+#    run_local_cmd="${run_what} 1> /tmp/out.log${col} &"
+  fi
+
+fi
+
+#///////////////////////////////
+#// known configs : ////////////
+#///////////////////////////////
+window_x=0
+window_y=0
+
+if [ "${run_config}" = "" ] ; then
+  if [ "`uname -n`" = "mac-76071.lal.in2p3.fr" -o "`uname -n`" = "mac-arts.lal.in2p3.fr" -o "`uname -n`" = "Arts-at-LAL-3.local" ] ; then
+    config=lal_12
+  else
+    config=21
+  fi
+else
+  config=${run_config}
+fi
+
+#echo "debug : config : ${config}"
+#exit
+
+master_host=`uname -n`
+#master_host=145.90.25.195 # CHEP-2013
+
+#//////////////////////////////////////////
+#/// local machine : //////////////////////
+#//////////////////////////////////////////
+if [ ${config} = "22" ] ; then
+  . ${app_dir}/config_local_22
+elif [ ${config} = "12" ] ; then
+  . ${app_dir}/config_local_12
+elif [ ${config} = "32" ] ; then
+  . ${app_dir}/config_local_32
+elif [ ${config} = "23" ] ; then
+  . ${app_dir}/config_local_23
+elif [ ${config} = "33" ] ; then
+  . ${app_dir}/config_local_33
+elif [ ${config} = "11" ] ; then
+  . ${app_dir}/config_local_11
+elif [ ${config} = "43" ] ; then
+  . ${app_dir}/config_local_43
+elif [ ${config} = "11_large" ] ; then
+  . ${app_dir}/config_local_11_large
+elif [ ${config} = "21" ] ; then
+  . ${app_dir}/config_local_21
+
+#//////////////////////////////////////////
+#/// LAL wall : ///////////////////////////
+#//////////////////////////////////////////
+elif [ ${config} = "lal_12_ins" ] ; then
+  . ${app_dir}/config_lal_12
+elif [ ${config} = "lal_9_234" ] ; then
+  . ${app_dir}/config_lal_9
+elif [ ${config} = "lal_9_123" ] ; then
+  . ${app_dir}/config_lal_9
+elif [ ${config} = "lal_9_124" ] ; then
+  . ${app_dir}/config_lal_9
+
+#//////////////////////////////////////////
+#//////////////////////////////////////////
+#//////////////////////////////////////////
+else
+  try_config="${app_dir}/config_${config}"
+  if [ -f ${try_config} ] ; then
+    . ${try_config}
+  else
+    echo "Unknown config ${config}"
+  fi
+fi
+
+#//////////////////////////////////////////
+#// end config ////////////////////////////
+#//////////////////////////////////////////
+
+if [ ${run_get_infos} = "yes" ] ; then
+  let all_width=${border_width}+${window_width}+${border_width}
+  let all_width=${cols}*${all_width}
+  let all_width=${all_width}-${border_width}-${border_width}
+  echo ${all_width}
+  let all_height=${border_height}+${window_height}+${border_height}
+  let all_height=${rows}*${all_height}
+  let all_height=${all_height}-${border_height}-${border_height}
+  echo ${all_height}
+  #aspect=`expr ${all_width} / ${all_height}`
+  #let aspect=${all_width}/${all_height}
+  aspect=`echo ${all_width}/${all_height} | bc -l`
+  echo ${aspect}
+  exit
+fi
+
+#////////////////////////////////
+#// start the master : //////////
+#////////////////////////////////
+
+export WALL_MASTER_VERBOSE=${run_master_verbose}
+export WALL_MASTER_DOCUMENT=${document}
+export WALL_MASTER_ACCEPT_TIMEOUT=20
+export WALL_MASTER_DATA_CLIENT_PORT=${run_master_data_client_port}
+
+# The below is set in the config_<xxx> file, but can be overwriten here :
+if [ "${run_master_control_width}" != "" ] ; then
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH="${run_master_control_width}"
+fi
+
+port=50730
+export WALL_MASTER_PORT=${port}
+
+export WALL_MASTER_HOST=${master_host}
+
+if [ ${run_master_verbose} = 1 ] ; then
+  echo "wall/run : WALL_MASTER_DOCUMENT ${WALL_MASTER_DOCUMENT}"
+  echo "wall/run : WALL_MASTER_ACCEPT_TIMEOUT ${WALL_MASTER_ACCEPT_TIMEOUT}"
+  echo "wall/run : WALL_MASTER_DATA_CLIENT_PORT ${WALL_MASTER_DATA_CLIENT_PORT}"
+  echo "wall/run : WALL_MASTER_PORT ${WALL_MASTER_PORT}"
+  echo "wall/run : WALL_MASTER_HOST ${WALL_MASTER_HOST}"
+fi    
+
+if [ "${run_master}" = "yes" ] ; then
+if [ "${run_master_debug}" = "yes" ] ; then
+# How to lauch gdb in background ?
+#  gdb ${bin_dir}/wall_master_X11
+  if [ -x /opt/local/bin/ggdb ] ; then
+    /opt/local/bin/ggdb ${master_bin_dir}/wall_master_X11
+  else
+    gdb ${master_bin_dir}/wall_master_X11
+  fi
+  exit
+else
+  if [ ${run_windows} = "yes" ] ; then
+    if [ "`uname | grep CYGWIN`" != "" ] ; then
+      echo "master expected to have been started on a ${master_host}"
+    else
+      ${master_bin_dir}/wall_master_X11 &
+#      echo "start wall_screen_Windows programs on remote machines."
+#      exit
+    fi
+  else
+    if [ ${run_cocoa} = "yes" ] ; then
+      if [ ${run_master_cocoa} = "yes" ] ; then
+        if [ ${run_master_verbose} = 1 ] ; then
+          echo "warning : run ${master_bin_dir}/wall_master_Cocoa.app/Contents/MacOS/wall_master_Cocoa &"
+          ${master_bin_dir}/wall_master_Cocoa.app/Contents/MacOS/wall_master_Cocoa &
+        else	  
+          open ${master_bin_dir}/wall_master_Cocoa.app &
+        fi	    
+      else
+        ${master_bin_dir}/wall_master_X11 &
+      fi 
+    else
+      ${master_bin_dir}/wall_master_X11 &
+    fi
+  fi
+fi
+fi
+
+if [ ${run_master_only} = "yes" ] ; then exit;fi
+
+#////////////////////////////////
+#// start the wall proxy : //////
+#////////////////////////////////
+if [ "${run_proxy}" = "yes" ] ; then
+  procs=`ps ax | grep wall_proxy | grep -v grep`
+  if [ "${procs}" = "" ] ; then
+    ${master_bin_dir}/wall_proxy ${run_proxy_verbose} &
+  fi
+fi
+
+#////////////////////////////////
+#// start the screen_hosts : ////
+#////////////////////////////////
+
+# row 0 = bottom
+# col 0 = left
+
+index=0
+row=0
+
+for ri in ${rs} ; do
+  col=0
+  for ci in ${cs} ; do
+    x11_display=${x11_displays[${index}]}
+
+    screen_host=${screen_hosts[${index}]}
+    monitor=${monitors[${index}]}
+    full_screen=${full_screens[${index}]}
+    run_screen=${run_screens[${index}]}
+    window_x=${win_x[${index}]}
+    window_y=${win_y[${index}]}
+
+    #window_no_decorations=1
+    echo "starting screen program (${row},${col}) on ${screen_host} with port ${port}, monitor ${monitor}, full_screen ${full_screen}..."
+    echo "window_y ${window_y}"
+
+    eval ${run_screen}
+
+    let col=${col}+1
+
+    let index=${index}+1
+  done
+  let row=${row}+1
+done

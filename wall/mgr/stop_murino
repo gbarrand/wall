@@ -1,0 +1,4 @@
+#!/bin/sh -f
+/usr/local/wall/1.21.0/bin/wall kill wall_
+/usr/local/wall/1.21.0/bin/kill_proc wall_
+

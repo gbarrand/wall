@@ -1,0 +1,86 @@
+  cols=3;rows=3
+  window_width=400
+  window_height=200
+  border_width=20
+  border_height=10
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=800
+
+  screen_hosts[0]='not_used'
+  screen_hosts[1]='not_used'
+  screen_hosts[2]='not_used'
+  screen_hosts[3]='not_used'
+  screen_hosts[4]='not_used'
+  screen_hosts[5]='not_used'
+  screen_hosts[6]='not_used'
+  screen_hosts[7]='not_used'
+  screen_hosts[8]='not_used'
+
+  run_screens[0]=${run_local_cmd}
+  run_screens[1]=${run_local_cmd}
+  run_screens[2]=${run_local_cmd}
+  run_screens[3]=${run_local_cmd}
+  run_screens[4]=${run_local_cmd}
+  run_screens[5]=${run_local_cmd}
+  run_screens[6]=${run_local_cmd}
+  run_screens[7]=${run_local_cmd}
+  run_screens[8]=${run_local_cmd}
+
+  rs='1 2 3'
+  cs='1 2 3'
+
+  # row 0 (bottom)
+  win_x[0]=50
+  win_y[0]=550
+  win_x[1]=500
+  win_y[1]=550
+  win_x[2]=1000
+  win_y[2]=550
+
+  # row 1 (middle)
+  win_x[3]=50
+  win_y[3]=300
+  win_x[4]=550
+  win_y[4]=300
+  win_x[5]=1000
+  win_y[5]=300
+
+  # row 2 (top)
+  win_x[6]=50
+  win_y[6]=100
+  win_x[7]=550
+  win_y[7]=100
+  win_x[8]=1000
+  win_y[8]=100
+
+  monitors[0]=0
+  monitors[1]=0
+  monitors[2]=0
+  monitors[3]=0
+  monitors[4]=0
+  monitors[5]=0
+  monitors[6]=0
+  monitors[7]=0
+  monitors[8]=0
+
+  full_screens[0]=0
+  full_screens[1]=0
+  full_screens[2]=0
+  full_screens[3]=0
+  full_screens[4]=0
+  full_screens[5]=0
+  full_screens[6]=0
+  full_screens[7]=0
+  full_screens[8]=0
+
+  window_no_decorations=0
+  x11_display=${DISPLAY}
+
+  x11_displays[0]=${x11_display}
+  x11_displays[1]=${x11_display}
+  x11_displays[2]=${x11_display}
+  x11_displays[3]=${x11_display}
+  x11_displays[4]=${x11_display}
+  x11_displays[5]=${x11_display}
+  x11_displays[6]=${x11_display}
+  x11_displays[7]=${x11_display}
+  x11_displays[8]=${x11_display}

@@ -1,0 +1,31 @@
+  web_cache.clear();
+
+  //POST_cache.set_size(0);
+  //POST_cache.check_clear();
+
+  inlib::file::std_remove(files);
+
+  //std::cout << "debug : inlib::wall::EVT_QUIT..." << std::endl;
+
+ {inlib::wall::event event;
+  event.type = inlib::wall::EVT_QUIT;
+  if(!send_event(std::cout,screens,event)){}}
+
+ //moveTag.stopTimer();
+  //if(timerTag.m_timer) ::inlib::wall::EVT_RemoveTimer(timerTag.m_timer);
+
+  _sg_serv.finalize();
+
+  stop_screens(screens);
+  //clientinfoss.clear();
+
+  delete server_sock;
+
+#ifdef INLIB_MEM
+  }inlib::mem::balance(std::cout);
+  std::cout << "wall_master : exit(mem) ..." << std::endl;
+#else  
+  if(verbose) std::cout << "wall_master : exit ..." << std::endl;
+#endif
+
+  return EXIT_SUCCESS;

@@ -1,0 +1,48 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_view_astro
+#define wall_view_astro
+
+#include <inlib/sg/view_astro>
+
+#include "screen_client"
+#include "w2master"
+
+namespace wall {
+
+class view_astro : public inlib::sg::view_astro {
+  typedef inlib::sg::view_astro parent;
+public:
+  INLIB_SCLASS(wall::view_astro)
+public:
+  virtual const inlib::wget& wget() const {return m_w2master;}
+public:
+  view_astro(screen_client& a_screen_client,const inlib::xml::srvs& a_srvs)
+  :parent(a_screen_client.out(),a_srvs)
+  ,m_w2master(a_screen_client)
+  {}
+  virtual ~view_astro(){}
+protected:
+  view_astro(const view_astro& a_from)
+  :parent(a_from)
+  ,m_w2master(a_from.m_w2master.get_screen_client())
+  {}
+
+  view_astro& operator=(const view_astro& a_from){
+    return *this;
+  }
+protected:
+  wall::w2master m_w2master; //for simbad
+};
+
+}
+
+//#include <inlib/sg/viewer>
+//namespace wall {
+//inline view_astro* cast_view_astro(inlib::sg::viewer& a_viewer) {
+//  return inlib::safe_cast<inlib::sg::viewer,view_astro>(a_viewer);
+//}
+//}
+
+#endif

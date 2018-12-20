@@ -1,0 +1,76 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_action_files
+#define wall_action_files
+
+#include "../sg/file_chooser"
+
+#include <inlib/sg/gui_viewer>
+#include "pos_data"
+
+namespace wall {
+namespace action {
+
+inline inlib::sg::return_action open_file(inlib::sg::gui_viewer& a_gv,sg::file_chooser& a_widget,const pos_data& a_data) {
+  std::string path = a_widget.value.value();
+  std::string fmt = a_widget.format.value();
+
+  // the below find_file() uses the common_main/finder
+  // that uses wall/screen_client/wall::cache::fetch() that does
+  // a screen_client.wait_file() that uses the EVT_USER_FILE() protocol.
+
+  std::string file;
+  if(!a_gv.find_file(path,file)){
+    a_gv.pop_warn(a_data.m_popup,a_data.m_ex,a_data.m_ey,"find_file() failed");
+    return inlib::sg::return_to_render;
+  }
+
+  inlib::args _args;
+ {std::string sv;
+  inlib::b2s(a_data.m_popup,sv);
+  _args.add(inlib::sg::s_popup(),sv);
+  inlib::num2s(a_data.m_ex,sv);
+  _args.add(inlib::sg::s_ex(),sv);
+  inlib::num2s(a_data.m_ey,sv);
+  _args.add(inlib::sg::s_ey(),sv);}
+
+  bool done;
+  if(!a_gv.opener().open(file,fmt,_args,done)||!done) {
+    a_gv.pop_warn(a_data.m_popup,a_data.m_ex,a_data.m_ey,"open() failed");
+    return inlib::sg::return_to_render;
+  }
+
+  return inlib::sg::return_to_render;
+}
+
+inline inlib::sg::return_action files(inlib::sg::gui_viewer& a_gv,const pos_data& a_data) {
+  if(!a_data.m_screen_client.send_once(inlib::wall::EVT_USER_COMMAND(),s_get_doc_dir())) {
+    a_gv.pop_warn(a_data.m_popup,a_data.m_ex,a_data.m_ey,"send_once() failed");
+    return inlib::sg::return_to_render;
+  }
+
+  std::string doc_dir; //absolute on the master machine.
+  if(!a_data.m_screen_client.wait_string(doc_dir)) {
+    a_gv.pop_warn(a_data.m_popup,a_data.m_ex,a_data.m_ey,"wait_string() failed");
+    return inlib::sg::return_to_render;
+  }
+
+  sg::file_chooser* fch = new sg::file_chooser(a_gv.ttf(),a_data.m_screen_client);
+  a_gv.set_style(*fch);
+
+  fch->exts.add(a_gv.opener().exts());
+  fch->dirs.add(doc_dir);
+
+  inlib::sg::add_callback(a_gv,*fch,open_file,a_data);
+
+  fch->initialize(a_gv.out());
+
+  a_gv.show_widget(fch,a_data.m_popup,a_data.m_ex,a_data.m_ey);
+
+  return inlib::sg::return_to_render;
+}
+
+}}
+
+#endif

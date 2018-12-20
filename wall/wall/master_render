@@ -1,0 +1,114 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_master_render
+#define wall_master_render
+
+#ifdef EXLIB_NO_GL
+
+#include <exlib/X11/colors>
+
+inline void render(Display* a_display,Window a_window,
+                   unsigned int a_w,unsigned int a_h,
+                   unsigned int a_cols,unsigned int a_rows,
+		   unsigned int a_bw,unsigned int a_bh) {
+  GC gc = ::XCreateGC(a_display,XDefaultRootWindow(a_display),0,0);
+
+  exlib::X11::pixels_t pixels;
+  exlib::X11::colors_t colors;
+
+  if(!exlib::X11::set_foreground(a_display,gc,pixels,colors,0.3f,0.3f,0.3f)) {}
+
+  ::XClearWindow(a_display,a_window);
+  ::XFillRectangle(a_display,a_window,gc,0,0,a_w,a_h);
+
+  double bw = double(a_bw);
+  double bh = double(a_bh);
+
+  double w = double(a_w)/double(a_cols)-2*bw;
+  double h = double(a_h)/double(a_rows)-2*bh;
+
+  if(!exlib::X11::set_foreground(a_display,gc,pixels,colors,0.8f,0.8f,0.8f)) {}
+
+  for(unsigned int row=0;row<a_rows;row++) {
+    double y = row*(h+2*bh)+bh;
+    for(unsigned int col=0;col<a_cols;col++) {
+      double x = col*(w+2*bw)+bw;
+
+      float floats[12];
+      floats[0] =   x;floats[ 1] =   y;floats[ 2] = 0;
+      floats[3] = x+w;floats[ 4] =   y;floats[ 5] = 0;
+      floats[6] = x+w;floats[ 7] = y+h;floats[ 8] = 0;
+      floats[9] =   x;floats[10] = y+h;floats[11] = 0;
+
+      ::XFillRectangle(a_display,a_window,gc,int(x),int(y),(unsigned int)w,(unsigned int)h);
+    }
+  }
+
+ {inlib_vforit(exlib::X11::Pixel,pixels,it) {
+    ::XFreeColors(a_display,XDefaultColormapOfScreen(XDefaultScreenOfDisplay(a_display)),&(*it),1,0);
+  }
+  pixels.clear();}
+  colors.clear();
+  if(gc) {
+    ::XFreeGC(a_display,gc);
+    gc = 0;
+  }
+}
+#else
+#include <exlib/OpenGL>
+
+inline void render(unsigned int a_w,unsigned int a_h,
+                   unsigned int a_cols,unsigned int a_rows,
+		   unsigned int a_bw,unsigned int a_bh) {
+  ::glClearColor(0.3f,0.3f,0.3f,0);
+  ::glClear(GL_COLOR_BUFFER_BIT);
+  ::glClear(GL_DEPTH_BUFFER_BIT);
+
+  ::glViewport(0,0,a_w,a_h);
+  
+  ::glMatrixMode(GL_PROJECTION); 
+  ::glLoadIdentity();
+#ifdef EXLIB_GL_GLES
+  ::glOrthof(0,a_w,0,a_h,0.1,4);
+#else
+  ::glOrtho(0,a_w,0,a_h,0.1,4);
+#endif
+
+  ::glMatrixMode(GL_MODELVIEW);
+  ::glLoadIdentity();
+  ::glTranslatef(0,0,-1);
+
+//::glColor3d(0.5,0.9,0.9);   
+  ::glColor3d(0.8,0.8,0.8);   
+
+  double bw = double(a_bw);
+  double bh = double(a_bh);
+
+  double w = double(a_w)/double(a_cols)-2*bw;
+  double h = double(a_h)/double(a_rows)-2*bh;
+
+  for(unsigned int row=0;row<a_rows;row++) {
+    double y = row*(h+2*bh)+bh;
+    for(unsigned int col=0;col<a_cols;col++) {
+      double x = col*(w+2*bw)+bw;
+
+      float floats[12];
+      floats[0] =   x;floats[ 1] =   y;floats[ 2] = 0;
+      floats[3] = x+w;floats[ 4] =   y;floats[ 5] = 0;
+      floats[6] = x+w;floats[ 7] = y+h;floats[ 8] = 0;
+      floats[9] =   x;floats[10] = y+h;floats[11] = 0;
+
+      ::glEnableClientState(GL_VERTEX_ARRAY);
+      ::glVertexPointer(3,GL_FLOAT,0,floats);
+      ::glDrawArrays(GL_TRIANGLE_FAN,0,4);
+      ::glDisableClientState(GL_VERTEX_ARRAY);
+    }
+  }
+
+  ::glFinish();
+
+}
+#endif
+
+#endif

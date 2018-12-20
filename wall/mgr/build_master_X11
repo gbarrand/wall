@@ -1,0 +1,77 @@
+#!/bin/sh -f
+
+# -x11_no_gl : to build in pure X11.
+
+bush_home=../../bush
+
+. ${bush_home}/args
+
+. ${bush_home}/on_where
+
+# macpro4 : enfore a build in pure X11 since the GLX does not work from macpro4 to other X11 servers.
+if [ ${on_macpro4} = yes ] ; then build_args="${build_args} -no_gl"; fi
+
+. ${bush_home}/exlib_header
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+build_distrib=no
+use_archive=yes #not set by exlib_header
+
+app_src=../X11/master.cpp
+app_exe=wall_master_X11
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+if [ ${build_visual} = "yes" ] ; then
+  echo "wall/mgr/build_master_X11 : visual not handled."
+  exit
+fi
+
+cppflags="${cppflags} -DAPP_USE_THREAD"
+
+if [ ${build_clang} = "yes" ] ; then
+  cppflags="${cppflags} -Wno-variadic-macros -Wno-unused-const-variable"
+fi
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+use_inlib=yes
+use_exlib=yes
+
+if [ ${build_no_gl} = yes ] ; then
+  echo dummy > /dev/null
+else
+  use_GL=yes
+  use_GLX=yes
+fi
+use_X11=yes
+use_jpeg=yes
+use_zlib=yes
+use_thread=yes
+
+. ${bush_home}/use/inlib
+. ${bush_home}/use/exlib
+
+if [ ${build_no_gl} = yes ] ; then
+  . ${bush_home}/use/X11
+else
+  . ${bush_home}/use/GLX # before X11
+  . ${bush_home}/use/X11
+  . ${bush_home}/use/GL
+fi
+
+. ${bush_home}/use/jpeg
+. ${bush_home}/use/zlib
+. ${bush_home}/use/thread
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+. ${bush_home}/application
+

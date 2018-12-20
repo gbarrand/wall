@@ -1,0 +1,16 @@
+#!/bin/sh -f
+
+# Used for debugging.
+
+export WALL_MASTER_DATA_CLIENT_PORT=50800
+export WALL_MASTER_PORT=50730
+
+export WALL_MASTER_ACCEPT_TIMEOUT=20
+
+export WALL_MASTER_VERBOSE=0
+export WALL_MASTER_DOCUMENT=
+
+/usr/local/wall/1.12/bin/wall_master_X11
+#open /usr/local/wall/1.12/bin/wall_master_Cocoa.app
+
+

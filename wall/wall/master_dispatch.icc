@@ -1,0 +1,196 @@
+
+   {inlib::wall::event event;
+    void* tag;
+    while(all_events.get_event(event,tag)) {
+      inlib::net::base_socket* client = (inlib::net::base_socket*)tag;    
+
+      if(sync_screens.size()) {
+        if(event.user.code!=inlib::wall::EVT_USER_SYNC_SCREEN()) {
+          std::cout << "master : WARNING :"
+                    << " sync clients active but receiving an unexpected event :" << std::endl;
+          inlib::wall::dump_event(std::cout,event);
+          delayed_events.push_event(event,tag);
+          continue;
+        }
+      }
+      if(pick_screens.size()) { // global pick sync active :
+        if(event.user.code!=inlib::wall::EVT_USER_PICK_SCREEN()) {
+          std::cout << "master : WARNING :"
+                    << " pick clients active but receiving an unexpected event :" << std::endl;
+          inlib::wall::dump_event(std::cout,event);
+          delayed_events.push_event(event,tag);
+          continue;
+        }
+      }
+
+      if((event.type==inlib::wall::EVT_MOUSEBUTTONDOWN)||
+         (event.type==inlib::wall::EVT_MOUSEBUTTONUP)  ||
+         (event.type==inlib::wall::EVT_MOUSEMOTION)    ||
+         (event.type==inlib::wall::EVT_KEYDOWN)        ){
+        if(!send_event(std::cout,screens,event)) {}
+
+      } else if(event.type==inlib::wall::EVT_USEREVENT){
+        if(event.user.code==inlib::wall::EVT_USER_QUIT()) {
+          to_quit = true;
+          //a_out << "debug : EVT_USER_QUIT()..." << std::endl;
+
+        } else if(event.user.code==inlib::wall::EVT_USER_GET_FILE()) {  
+          master_dispatch_EVT_USER_GET_FILE(std::cout,screens,event,doc_dir);
+
+        } else if(event.user.code==inlib::wall::EVT_USER_GET_URL()) {
+          master_dispatch_EVT_USER_GET_URL(std::cout,screens,event,GET_URL_cookie);
+
+        } else if(event.user.code==inlib::wall::EVT_USER_POST_URL()) {
+          master_dispatch_EVT_USER_POST_URL(std::cout,screens,event,GET_URL_cookie);
+
+        } else if(event.user.code==inlib::wall::EVT_USER_UPDATE_NODE()) {
+          master_dispatch_EVT_USER_UPDATE_NODE(std::cout,screens,event,UPDATE_NODE_cache,UPDATE_NODE_cookie);
+
+        } else if(event.user.code==inlib::wall::EVT_USER_COMMAND()) {
+	
+          //inlib::wall::dump_event(std::cout,event);
+
+          std::string cmd; //<action>\n[<arg>\n] expected.
+          read_event_string(event,cmd);
+          std::vector<std::string> words;
+          inlib::words(cmd,"\n",true,words); //accept empty string arg.
+          if(!words.size()) {
+            std::cout << "master_dispatch_.icc : EVT_USER_COMMAND :"
+                      << " syntax error for " << inlib::sout(cmd) << ". <action>\\n[<arg>\\n] expected."
+                      << std::endl;
+            to_quit = true;
+          } else {
+            const std::string& action = words[0];
+            //::printf("debug : EVT_USER_COMMAND : action : %s\n",
+            //    action.c_str());
+            std::vector<std::string> args = words;
+            args.erase(args.begin());
+
+            /////////////////////////////////////////////////////
+            /////////////////////////////////////////////////////
+            if(action==s_data_client_bind()) {
+              command_data_client_bind(std::cout,args,screens,this_host,_sg_serv);
+
+            } else if(action==s_data_client_disconnect()) {
+              command_data_client_disconnect(std::cout,_sg_serv);
+
+/*
+            } else if(inlib::is_beg(action,inlib::wall::protocol::s_rwc_get_params())) {
+
+              if(_sg_serv.sg_client_sock().is_connected()) {
+                if(!a_sg_serv_sock.send_string(cmd)) {}
+              }
+*/ 
+            } else {
+              master_dispatch_EVT_USER_COMMAND(std::cout,screens,action,args,_anims_timer,doc_dir,to_quit);
+            }			           
+          }			           
+
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        } else if(event.user.code==inlib::wall::EVT_USER_SYNC_MOVE()) {
+          sync_move_screens.remove(client);
+
+        } else if(event.user.code==inlib::wall::EVT_USER_SYNC_ANIM()) {
+          sync_anim_screens.remove(client);
+
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        } else if(event.user.code==inlib::wall::EVT_USER_START_SYNC()) {
+          if(sync_screens.empty()) {
+            sync_screens = screens;
+          } else {
+            std::cout << "master :"
+                  << " EVT_USER_START_SYNC() :"
+                  << " a sync clients request is already active."
+                  << std::endl;
+          }
+
+        } else if(event.user.code==inlib::wall::EVT_USER_SYNC_SCREEN()) {
+          if(sync_screens.size()) { // global sync active :
+            sync_screens.remove(client);
+            if(sync_screens.empty()) {
+              if(!send_string(std::cout,screens,"")){}
+            }
+          } else {
+            std::cout << "master : WARNING : delayed SYNC_SCREEN." << std::endl;
+            // we receive a SYNC_SCREEN of a client whilst the global
+            // request to sync is not yet arrived to the master. We put the
+            // event back in the pool.
+            delayed_events.push_event(event,tag);
+          }
+
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        } else if(event.user.code==inlib::wall::EVT_USER_START_PICK()) {
+          if(pick_screens.empty()) {
+            pick_screens = screens;
+            pick_paths.clear();
+            if(!send_string(std::cout,screens,s_pick_enabled())){}
+          } else {
+            std::cout << "master :"
+                      << " EVT_USER_START_PICK() :"
+                      << " a pick clients request is already active."
+                      << std::endl;
+          }
+
+        } else if(event.user.code==inlib::wall::EVT_USER_PICK_SCREEN()) {
+          if(pick_screens.size()) { // global pick sync active :
+            std::string path;
+            read_event_string(event,path); //have to empty the event.
+            bool found = false;
+            inlib_lforcit(inlib::net::base_socket*,pick_screens,it) {if(*it==client) {found = true;break;}}
+            if(!found) {
+              //already removed.
+            } else {
+              pick_screens.remove(client);
+              pick_paths.push_back(path);
+              if(pick_screens.empty()) {
+                // compare paths from screens :
+                bool ok = true;
+                inlib_vforcit(std::string,pick_paths,it) {
+                  if(*it!=pick_paths.front()) {ok = false;break;}
+                }
+                if(!ok) {
+                  std::cout << "master : WARNING : bad pick :" << std::endl;
+                  inlib::dump(pick_paths,std::cout);
+                }
+                if(!send_string(std::cout,screens,ok?s_pick_ok():s_pick_bad())){}
+              }
+            }
+
+          } else {
+            // this shouled not happen.
+            std::cout << "master : WARNING : delayed PICK_SCREEN." << std::endl;
+            // we receive a PICK_SCREEN of a client whilst the global
+            // request to sync pick clients is not yet arrived to the master. We put the
+            // event back in the pool.
+            delayed_events.push_event(event,tag);
+          }
+
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
+        } else {
+          std::cout << "master :"
+                    << " received an unexpected"
+                    << " inlib::wall::EVT_USEREVENT with code " 
+                    << event.user.code
+                    << std::endl;
+          to_quit = true;
+        }
+
+      } else {
+        std::cout << "master :"
+                  << " received an unexpected event type "
+                  << event.type
+                  << std::endl;
+        to_quit = true;
+     }
+
+    }} //end  while(all_events.get_event(event,tag))
+
+    all_events.transfer(delayed_events);

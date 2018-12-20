@@ -1,0 +1,25 @@
+  cols=1;rows=1
+  window_width=1600
+  window_height=800
+  # have border to hide cursor.
+  border_width=10
+  border_height=10
+  export WALL_MASTER_CONTROL_WINDOW_WIDTH=800
+
+  screen_hosts[0]='not_used'
+  run_screens[0]=${run_local_cmd}
+
+  rs='1'
+  cs='1'
+
+  win_x[0]=50
+  win_y[0]=550
+
+  monitors[0]=0
+
+  full_screens[0]=0
+
+  window_no_decorations=0
+  x11_display=${DISPLAY}
+
+  x11_displays[0]=${x11_display}

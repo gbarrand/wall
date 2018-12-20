@@ -1,0 +1,193 @@
+#!/bin/sh -f
+
+bush_home=../../bush
+
+build_set_x=no
+build_verbose=no
+
+build_apps=yes
+build_distrib=yes
+build_install=no
+
+build_distrib_only=no
+
+build_args=""
+while test $# -ge 1 ; do
+  case $1 in
+    -x) build_set_x=yes;      build_args="${build_args} $1";;
+    -v) build_verbose=yes;    build_args="${build_args} $1";;
+    -clean) build_distrib=no; build_args="${build_args} $1";;
+
+    -install)      build_install=yes;;
+    -distrib)      echo "wall/mgr/build : -distrib not valid.";exit;;
+    -distrib_only) build_distrib_only=yes;;
+
+    -*) build_args="${build_args} $1";;
+     *) echo "wall/mgr/build : unknwon option : $1" ; exit ;;
+  esac
+  shift
+done
+
+if [ ${build_set_x} = "yes" ] ; then set -x; fi
+
+if [ "${build_install}" = "yes" ] ; then
+  ./install ${build_args}
+  exit
+fi
+
+. ${bush_home}/on_where
+
+if [ "${build_distrib_only}" = "yes" ] ; then
+  build_apps=no
+  build_distrib=yes
+fi
+
+if [ "${build_apps}" = "yes" ] ; then
+
+  if [ `uname` = Darwin ] ; then
+
+    have_clang=yes
+    ${bush_home}/check_app clang++ 'clang++ program not found.'
+    build_status=$?;if [ ${build_status} != 0 ] ; then have_clang=no;fi
+
+    if [ ${have_clang} = no ] ; then
+      echo "wall/mgr/build : enforce -gnu."
+	
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_master_Cocoa ..."; fi
+      ./build_master_Cocoa -bin_gnu -cocoa_gnu ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_screen_Cocoa ..."; fi
+      ./build_screen_Cocoa -bin_gnu ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_screen_X11 ..."; fi
+      ./build_screen_X11 -bin_gnu ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_master_X11 ..."; fi
+      ./build_master_X11 -bin_gnu ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build file2wall ..."; fi
+      ./build_file2wall -bin_gnu ${build_args}
+
+      #if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_proxy ..."; fi
+      #./build_wall_proxy -bin_gnu ${build_args}
+
+    else
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_master_Cocoa ..."; fi
+      ./build_master_Cocoa -bin_clang -ourex_bin_sdk_mac -cocoa ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_screen_Cocoa ..."; fi
+      ./build_screen_Cocoa -bin_clang ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_screen_X11 ..."; fi
+      ./build_screen_X11 -bin_clang ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_master_X11 ..."; fi
+      ./build_master_X11 -bin_clang ${build_args}
+
+      if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build file2wall ..."; fi
+      ./build_file2wall -bin_clang ${build_args}
+
+      #if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_proxy ..."; fi
+      #./build_wall_proxy -bin_clang ${build_args}
+
+    fi
+
+  elif [ ${on_Windows} = yes ] ; then
+
+    if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : WARNING : wall_master_Windows does not exist."; fi
+
+    if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_master_Windows ..."; fi
+    ./build_screen_Windows ${build_args}
+
+    if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build file2wall ..."; fi
+    ./build_file2wall ${build_args}
+
+    #if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_proxy ..."; fi
+    #./build_wall_proxy ${build_args}
+
+  elif [ `uname` = Linux ] ; then  # must be after the upper Linux.
+
+    if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_screen_X11 ..."; fi
+    ./build_screen_X11 ${build_args}
+
+    if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_master_X11 ..."; fi
+    ./build_master_X11 ${build_args}
+
+    if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build file2wall ..."; fi
+    ./build_file2wall ${build_args}
+
+    #if [ ${build_verbose} = yes ] ; then echo "wall/mgr/build : build wall_proxy ..."; fi
+    #./build_wall_proxy ${build_args}
+
+  fi
+
+fi
+
+if [ "${build_distrib}" = "yes" ] ; then
+
+  . ${bush_home}/header_app
+
+  if [ ${build_verbose} = yes ] ; then 
+    echo "wall/mgr/build : build_distrib : build_path is ${build_path}"
+    echo "wall/mgr/build : build_distrib : version is ${version}"
+  fi
+
+  /bin/rm -R -f ${build_path}/distrib
+  head=${build_path}/distrib/${app}/${version}
+  /bin/mkdir -p ${head}/bin
+
+  if [ ${build_visual} = "yes" ] ; then
+    /bin/cp ${build_path}/wall_screen_Windows.exe ${head}/bin/.
+    if [ -e  ${build_path}/wall_screen_Windows.exe.manifest ] ; then
+      /bin/cp ${build_path}/wall_screen_Windows.exe.manifest ${head}/bin/.
+    fi
+  else
+    if [ -f ${build_path}/wall_screen_X11 ] ; then
+      /bin/cp ${build_path}/wall_screen_X11 ${head}/bin/.
+    fi
+    if [ -f ${build_path}/wall_master_X11 ] ; then
+      /bin/cp ${build_path}/wall_master_X11 ${head}/bin/.
+    fi
+
+    /bin/cp ${build_path}/file2wall ${head}/bin/.
+    #/bin/cp ${build_path}/wall_proxy ${head}/bin/.
+    if [ `uname` = Darwin ] ; then
+      /bin/cp ${build_path}/wall_screen_Cocoa ${head}/bin/.
+      /bin/cp -R ${build_path}/wall_master_Cocoa.app ${head}/bin/.
+    fi
+
+    /bin/cp ./run_X        ${head}/bin/.
+    /bin/cp ./find_DISPLAY ${head}/bin/.
+  fi
+
+  /bin/cp ./run          ${head}/bin/.
+  /bin/cp ./stop         ${head}/bin/.
+  /bin/cp ./wall         ${head}/bin/.
+  /bin/cp ./kill_proc    ${head}/bin/.
+  /bin/cp ./LHCb2wall    ${head}/bin/.
+  find . -maxdepth 1 -name 'config_*' -exec /bin/cp {} ${head}/bin/. \;
+
+  /bin/cp -R -f ../res   ${head}/res
+
+  #NOTE : platform must be in sync with the install script.
+  platform=`uname`
+
+  zip_file="${app}-${version}-${platform}.zip"
+
+  if [ ${build_verbose} = yes ] ; then 
+    echo "wall/mgr/build : build_distrib : platform is ${platform}"
+    echo "wall/mgr/build : build_distrib : zip file is ${zip_file}"
+  fi
+
+  chmod -R a+rx ${head}/bin
+  chmod -R a+r ${head}/res
+
+  save_dir=`pwd`
+  cd ${build_path}/distrib
+  zip -qr ${zip_file} ./${app}
+  cd ${save_dir}
+
+  # for ./install :
+  /bin/cp ${build_path}/distrib/${zip_file} .
+
+fi

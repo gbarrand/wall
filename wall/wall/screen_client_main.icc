@@ -1,0 +1,74 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+  //needs :
+  //  bool verbose
+  //  inlib::args
+  //  bool params_from_env
+  //  std::ostream& wall_out
+
+  bool wall_status = true;
+
+  unsigned int monitor;
+  bool full_screen;
+  int window_x;
+  int window_y;
+  unsigned int window_width;
+  unsigned int window_height;
+  unsigned int menu_col,menu_row;
+  bool window_no_decorations;
+
+  std::string DOCUMENT;
+
+  std::string env_prefix("WALL_SCREEN_");
+  
+  if(!app_args(wall_out,
+               params_from_env,env_prefix,args,
+	       verbose,monitor,full_screen,
+               window_x,window_y,
+               window_width,window_height,
+               menu_col,menu_row,
+               window_no_decorations)) {
+    wall_status = false;
+  } else {
+
+    if(verbose) {
+      wall_out << "wall_screen : monitor is " << monitor << "." 
+                << std::endl;
+    }
+    //wall_out << "wall_screen : ww " << ww << " wh " << wh
+    //          << std::endl;
+
+    wclient.set_verbose(verbose);
+
+    if(!wclient.initialize(params_from_env,env_prefix,args,window_width,window_height)) {
+      wall_out << "wall_screen :"
+                << " wall::screen_client::initialize failed."
+                << std::endl;
+      wall_status = false;
+    } else {
+      inlib::tmpname("","wall_screen_","",DOCUMENT);  
+      if(!wclient.wait_file(DOCUMENT)) {
+        wall_out << "wall_screen :"
+                  << " wait_file failed." 
+                  << std::endl;
+        wall_status = false;
+      } else {
+        if(!wclient.wait_window_master_size()) {
+          wall_out << "wall_screen :"
+                    << " wait_window_master_size failed." 
+                    << std::endl;
+          wall_status = false;
+        } else {
+          if(verbose) {
+            wall_out << "wall_screen :"
+                      << " document is " << inlib::sout(DOCUMENT) << "."
+                      << std::endl;
+          }
+          if(DOCUMENT.empty()) {
+            wall_out << "wall_screen : no document given." << std::endl;
+          }  
+        }
+      }
+    }
+  }

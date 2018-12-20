@@ -1,0 +1,52 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_sg_image_grid
+#define wall_sg_image_grid
+
+#include <inlib/sg/image_grid>
+
+#include "tile_image"
+
+namespace wall {
+namespace sg {
+
+class image_grid: public inlib::sg::image_grid<tile_image> {
+  INLIB_NODE(image_grid,wall::sg::image_grid,inlib::sg::image_grid<tile_image>)
+protected:
+  virtual tile_image* create_IMAGE_NODE(unsigned int a_count) {
+    return new tile_image(m_local,m_wget_fits,m_http_cookie,m_host,m_port,m_data_dir, //to get fits
+                          m_wget_simbad,
+                          m_wget_fits,m_host,m_port,m_data_dir, //to get stars (stripe82calibStars ones)
+                          m_catalog,
+                          m_screen_client,a_count);
+  }
+public:
+  image_grid(inlib::sg::ui& a_ui,
+             const inlib::wget& a_wget_simbad,
+             // to get pyrfits params and fits, local or repserv :
+             //bool a_local,
+             const inlib::wget& a_wget_params,const inlib::wget& a_wget_fits,
+             const std::string& a_host,unsigned int a_port,
+             const std::string& a_data_dir, //local.
+             //
+             const inlib::lut<float>& a_lut,const inlib::SOPI::cmap& a_cmap,
+             double a_min,double a_max,double a_mean,double a_rms,
+             screen_client& a_screen_client)
+  :parent(a_ui,
+          a_wget_params,
+          false/*remote*/,a_wget_params,a_wget_fits,a_host,a_port,a_data_dir,
+          a_lut,a_cmap,a_min,a_max,a_mean,a_rms)
+  ,m_screen_client(a_screen_client){}
+  virtual ~image_grid(){}
+public:
+  image_grid(const image_grid& a_from)
+  :parent(a_from),m_screen_client(a_from.m_screen_client){}
+  image_grid& operator=(const image_grid& a_from){parent::operator=(a_from);return *this;}
+protected:
+  screen_client& m_screen_client;
+};
+
+}}
+
+#endif

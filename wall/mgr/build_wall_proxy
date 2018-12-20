@@ -1,0 +1,46 @@
+#!/bin/sh -f
+
+bush_home=../../bush
+
+. ${bush_home}/args
+
+. ${bush_home}/exlib_header
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+build_distrib=no
+use_archive=yes
+
+app_src=../../inexlib/exlib/apps/getserv.cpp
+app_exe=wall_proxy
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+use_inlib=yes
+
+use_tntnet=yes
+use_zip=yes
+use_zlib=yes
+use_thread=yes
+use_dl=yes
+
+#//exlib_build_use inlib tntnet zip zlib thread dl
+
+. ${bush_home}/use/inlib
+
+. ${bush_home}/use/tntnet  # it needs zip
+. ${bush_home}/use/zip     # it needs zlib
+. ${bush_home}/use/zlib
+. ${bush_home}/use/thread
+. ${bush_home}/use/dl
+
+#////////////////////////////////////
+#////////////////////////////////////
+#////////////////////////////////////
+
+. ${bush_home}/application
+
+

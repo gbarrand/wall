@@ -1,0 +1,84 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file wall.license for terms.
+
+#ifndef wall_sg_selection
+#define wall_sg_selection
+
+#include <inlib/sg/selection>
+#include <inlib/sg/path_desc>
+#include <inlib/wall/strings>
+#include <inlib/sys/process>
+
+#include "../screen_client"
+#include "../strings"
+
+namespace wall {
+namespace sg {
+
+class selection : public inlib::sg::selection {
+  INLIB_NODE(selection,wall::sg::selection,inlib::sg::selection)
+public:
+  selection(screen_client& a_client):parent(),m_screen_client(a_client){}
+  virtual ~selection(){}
+public:
+  selection(const selection& a_from):parent(a_from),m_screen_client(a_from.m_screen_client){}
+  selection& operator=(const selection& a_from){parent::operator=(a_from);return *this;}
+protected:
+  virtual node* do_pick(inlib::sg::event_action& a_action,int a_x,int a_y,float& a_z,float& a_w) {
+    // pick is done on all screens and a global consistency check is done by the master.
+
+    node* nd = parent::do_pick(a_action,a_x,a_y,a_z,a_w);
+
+//#define WALL_SG_SELECTION_PICK_NO_CHECK
+#ifdef WALL_SG_SELECTION_PICK_NO_CHECK
+#else
+    std::string path;
+    if(nd) {
+      //bool verbose = m_screen_client.index()?false:true;
+      if(!inlib::sg::node_path_desc(a_action.out(),*this,*nd,path/*,verbose*/)) {
+        //if(verbose) 
+        a_action.out() << "wall::sg::selection::do_pick :"
+                       << " for screen " << m_screen_client.index() << " :"
+                       << " node_path_desc failed."
+                       << std::endl;
+        //if(verbose) 
+        inlib::sg::node_path_dump(a_action.out(),*this,*nd);
+        // build a unique string :
+        path = "get_path_failed/";
+        inlib::numas(inlib::process_id(),path);
+        std::string host;
+        if(inlib::net::host_name(a_action.out(),host)) path += "/"+host;
+      }
+    } else {
+      //a_action.out() << "wall::sg::selection::do_pick :"
+      //               << " for screen " << m_screen_client.index() << " :"
+      //               << " nothing picked :"
+      //               << std::endl;
+    }
+
+    if(!m_screen_client.send_once(inlib::wall::EVT_USER_START_PICK())) {}
+
+   {std::vector<std::string> opts;
+    opts.push_back(s_pick_enabled());
+    std::string _s;
+    if(!m_screen_client.wait_string(opts,_s)) {}}
+
+    if(!m_screen_client.send(inlib::wall::EVT_USER_PICK_SCREEN(),path)) {}
+
+   {std::vector<std::string> opts;
+    opts.push_back(s_pick_ok());
+    opts.push_back(s_pick_bad());
+    std::string _s;
+    //A screen client can receive events from (data client -> master -> screen).
+    if(!m_screen_client.wait_string(opts,_s)) {}
+    if(_s==s_pick_bad()) return 0;}
+#endif //WALL_SG_SELECTION_PICK_NO_CHECK
+    return nd;
+  }
+protected:
+  screen_client& m_screen_client;
+};
+
+}}
+
+#endif
