@@ -1,0 +1,31 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_keyvals
+#define inlib_keyvals
+
+#include <vector>
+#include <string>
+
+#include "forit"
+
+namespace inlib {
+
+inline bool lines_to_keyvals(const std::vector<std::string>& a_lines,
+                             std::vector< std::pair<std::string,std::string> >& a_keyvals) {
+  inlib_vforcit(std::string,a_lines,it) {
+    const std::string& line = *it;
+    if(line.empty()) continue;
+    if(line.size() && (line[0]=='#')) continue;
+    std::string::size_type pos = line.find('=');
+    if(pos==std::string::npos) {a_keyvals.clear();return false;}
+    std::string key = line.substr(0,pos);
+    std::string value = line.substr(pos+1,line.size()-(pos+1));
+    a_keyvals.push_back(std::pair<std::string,std::string>(key,value));
+  }
+  return true;  
+}
+
+}
+
+#endif

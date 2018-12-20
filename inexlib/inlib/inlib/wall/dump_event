@@ -1,0 +1,100 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_wall_dump_event
+#define inlib_wall_dump_event
+
+#include "event"
+#include <ostream>
+
+#include "evt_user"
+
+namespace inlib {
+namespace wall {
+
+INLIB_GLOBAL_STRING(EVT_NOEVENT)
+INLIB_GLOBAL_STRING(EVT_KEYDOWN)
+INLIB_GLOBAL_STRING(EVT_KEYUP)
+INLIB_GLOBAL_STRING(EVT_MOUSEMOTION)
+INLIB_GLOBAL_STRING(EVT_MOUSEBUTTONDOWN)
+INLIB_GLOBAL_STRING(EVT_MOUSEBUTTONUP)
+INLIB_GLOBAL_STRING(EVT_QUIT)
+INLIB_GLOBAL_STRING(EVT_USEREVENT)
+
+#define EVT_TYPE_TO_STRING(a__type) \
+  if(a_type==a__type) return s_##a__type();
+
+inline const std::string& type_to_string(event_type a_type) {
+  EVT_TYPE_TO_STRING(EVT_NOEVENT)
+  EVT_TYPE_TO_STRING(EVT_KEYDOWN)
+  EVT_TYPE_TO_STRING(EVT_KEYUP)
+  EVT_TYPE_TO_STRING(EVT_MOUSEMOTION)
+  EVT_TYPE_TO_STRING(EVT_MOUSEBUTTONDOWN)
+  EVT_TYPE_TO_STRING(EVT_MOUSEBUTTONUP)
+  EVT_TYPE_TO_STRING(EVT_QUIT)
+  EVT_TYPE_TO_STRING(EVT_USEREVENT)
+  return s_unknown();
+}
+
+#undef EVT_TYPE_TO_STRING
+
+inline void dump_event(std::ostream& a_out,const event& a_event) {
+  a_out << "dump_event : event.type :" 
+        << " \"" << (unsigned int)a_event.type << "\" "
+        << type_to_string((event_type)a_event.type)
+        << std::endl;
+  switch (a_event.type) {
+  case EVT_MOUSEMOTION:
+    a_out << " EVT_MOUSEMOTION :"
+          << " which " << (unsigned int)a_event.motion.which
+          << ", state " << (unsigned int)a_event.motion.state
+          << ", x " << a_event.motion.x
+          << ", y " << a_event.motion.y
+          << ", xrel " << a_event.motion.xrel
+          << ", yrel " << a_event.motion.yrel
+          << std::endl;
+    break;
+  case EVT_MOUSEBUTTONDOWN:
+    a_out << " EVT_MOUSEBUTTONDOWN :"
+          << " which " << (unsigned int)a_event.button.which
+          << ", button " << (unsigned int)a_event.button.button
+          << ", state " << (unsigned int)a_event.button.state
+          << ", x " << a_event.button.x
+          << ", y " << a_event.button.y
+          << std::endl;
+    break;
+  case EVT_MOUSEBUTTONUP:
+    a_out << " EVT_MOUSEBUTTONUP :"
+          << " which " << (unsigned int)a_event.button.which
+          << ", button " << (unsigned int)a_event.button.button
+          << ", state " << (unsigned int)a_event.button.state
+          << ", x " << a_event.button.x
+          << ", y " << a_event.button.y
+          << std::endl;
+    break;
+  case EVT_KEYDOWN:
+    a_out << " EVT_KEYDOWN :"
+          << " keysym " << a_event.key.keysym.sym
+          << std::endl;
+    break;
+  case EVT_USEREVENT:
+    a_out << " EVT_USEREVENT :"
+          << " code " << a_event.user.code
+          << " scode " << user_code_to_string(a_event.user.code)
+          << ", data1 " << a_event.user.data1
+          << ", data2 " << a_event.user.data2
+          << std::endl;
+    break;
+  case EVT_QUIT:
+    a_out << " EVT_QUIT :" << std::endl;
+    break;
+  default:
+    a_out << " EVT_<> : no full dump yet." << std::endl;
+    break;			
+  }
+}
+
+}}
+
+#endif
+

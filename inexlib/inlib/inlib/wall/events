@@ -1,0 +1,69 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_wall_events
+#define inlib_wall_events
+
+#include "event"
+
+#include <list>
+
+namespace inlib {
+namespace wall {
+
+class events : public std::list< std::pair<event,void*> > {
+  typedef std::pair<event,void*> item;
+  typedef std::list<item> parent;
+public:
+  events(){}
+  virtual ~events() {}
+public:
+  events(const events& a_from):parent(a_from){}
+  events& operator=(const events& a_from){
+    parent::operator=(a_from);
+    return *this;
+  } 
+public:
+  void push_event(const event& a_event,void* a_tag = 0) {parent::push_back(item(a_event,a_tag));}
+
+  bool get_event(event& a_event){
+    if(parent::empty()) {
+      a_event.type = EVT_NOEVENT;
+      return false;
+    }
+    a_event = parent::front().first;
+    parent::pop_front();
+    return true;
+  }
+
+  bool get_event(event& a_event,void*& a_tag){
+    if(parent::empty()) {
+      a_event.type = EVT_NOEVENT;
+      a_tag = 0;
+      return false;
+    }
+    item& _item = parent::front();
+    a_event = _item.first;
+    a_tag = _item.second;
+    parent::pop_front();
+    return true;
+  }
+
+  //void transfer(events& a_events) { //a_events is emptied by this method.
+  //  wall::event event;
+  //  void* tag;
+  //  while(a_events.get_event(event,tag)) parent::push_back(item(event,tag));
+  //}
+
+  //void copy(events& a_events) {
+  //  for(events::const_iterator ait=a_events.begin();ait!=a_events.end();++ait) parent::push_back(*ait);
+  //}
+  void transfer(events& a_events) {
+    for(events::const_iterator ait=a_events.begin();ait!=a_events.end();++ait) parent::push_back(*ait);
+    a_events.clear();
+  }
+};
+
+}}
+
+#endif

@@ -1,0 +1,89 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_mparam
+#define inlib_mparam
+
+// parameter for a main. Coming from environment
+// or from (argc,argv) command line arguments.
+// Used in SoSDL applications.
+
+#include "args"
+#include "system"
+#include "touplow"
+
+namespace inlib {
+
+inline bool mparam_bool(bool a_from_env,
+                           const args& a_args, 
+                           const std::string& a_prefix,
+                           const std::string& a_name,
+                           const bool& a_def,
+                           bool& a_value) {
+  a_value = a_def;
+  bool found = true;
+  if(a_from_env) { 
+    std::string NAME(a_name);
+    touppercase(NAME);
+    if(!get_env_bool(a_prefix+NAME,a_value)) {
+      found = false;
+      a_value = a_def;
+    }
+  } else {
+    if(!a_args.find("-"+a_name,a_value)) {
+      found = false;
+      a_value = a_def;
+    }
+  }
+  return found;
+}
+
+inline bool mparam(bool a_from_env,const args& a_args,
+                      const std::string& a_prefix,
+                      const std::string& a_name,
+                      const std::string& a_def,
+                      std::string& a_value) {
+  a_value = a_def;
+  bool found = true;
+  if(a_from_env) { 
+    std::string NAME(a_name);
+    touppercase(NAME);
+    if(!get_env(a_prefix+NAME,a_value)) {
+      found = false;
+      a_value = a_def;
+    }
+  } else {
+    if(!a_args.find("-"+a_name,a_value)) {
+      found = false;
+      a_value = a_def;
+    }
+  }
+  return found;
+}
+
+template <class T>
+inline bool mparam(bool a_from_env,const args& a_args,
+                   const std::string& a_prefix,
+                   const std::string& a_name,
+                   const T& a_def,T& a_value) {
+  a_value = a_def;
+  bool found = true;
+  if(a_from_env) { 
+    std::string NAME(a_name);
+    touppercase(NAME);
+    if(!get_env<T>(a_prefix+NAME,a_value)) {
+      found = false;
+      a_value = a_def;
+    }
+  } else {
+    if(!a_args.find<T>("-"+a_name,a_value)) {
+      found = false;
+      a_value = a_def;
+    }
+  }
+  return found;
+}
+
+}
+
+#endif

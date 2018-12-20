@@ -1,0 +1,65 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file exlib.license for terms.
+
+#ifndef exlib_zit
+#define exlib_zit
+
+#include "zip"
+
+#include <inlib/file_iterator>
+
+namespace exlib {
+
+class zitb : public zip_iterator, public inlib::file_iterator {
+public:
+  virtual size_t entries() const {return entries_();}
+  virtual size_t index() const {return index_();}
+  virtual bool next() {return next_();}
+  virtual bool rewind() {return rewind_();}
+public:
+  virtual bool open(const std::string& a_file) {return open_(a_file);}
+  //virtual bool close() {return close_();}
+
+  virtual bool begin_buffer(size_t& a_sz,char*& a_buffer) {
+    std::string name;
+    return read_(name,a_sz,a_buffer);
+    //NOTE : a_sz = 0 could mean that zip entry is a directory.
+  }
+  virtual bool end_buffer(char*& a_buffer) {
+    if(a_buffer) {        
+      delete [] a_buffer;
+#ifdef INLIB_MEM
+      inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    }
+    a_buffer = 0;
+    return true;     
+  }
+
+public:
+  zitb(std::ostream& a_out,bool a_verbose,const std::string& a_tmp_dir)
+  :zip_iterator(a_out,a_verbose)
+  ,inlib::file_iterator(a_out,a_verbose)
+  ,m_tmp_dir(a_tmp_dir)
+  {}
+  virtual ~zitb(){}
+protected:
+  zitb(const zitb& a_from)
+  :zip_iterator(a_from)
+  ,inlib::file_iterator(a_from)
+  ,m_tmp_dir(a_from.m_tmp_dir)
+  {}
+  zitb& operator=(const zitb& a_from){
+    zip_iterator::operator=(a_from);
+    m_tmp_dir = a_from.m_tmp_dir;
+    return *this;
+  }
+protected:
+  std::string m_tmp_dir;
+};
+
+}
+
+#endif
+
+//exlib_build_use inlib zlib zip

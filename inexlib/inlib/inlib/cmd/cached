@@ -1,0 +1,95 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_cmd_cached_get_cmd
+#define inlib_cmd_cached_get_cmd
+
+#include "session"
+
+#include "../nostream"
+#include "../net/http"
+#include "../buffer_cache"
+
+namespace inlib {
+namespace cmd {
+
+template <class MUTEX>
+class cached_get_cmd : public base_cmd {
+  typedef base_cmd parent;
+public:
+  virtual void exec(session& a_session,
+                    const std::vector<std::string>& a_args,
+                    std::ostream& a_sout,std::ostream& a_out) {
+    if(a_args.size()!=3) {
+      a_session.reply_failed(a_sout,"cached_get_cmd : three arguments expected.");
+      return;
+    }    
+
+    //::printf("debug : cached_get_cmd : 0001 |%s|\n",a_args[0].c_str());
+
+    // See wall/sg/wproxy :
+    //a_args[0] = <repserv host>
+    //a_args[1] = <repserv port>
+    //a_args[2] = <path>
+
+    char* buffer = 0;
+    uint64 length = 0;
+    if(m_cache.find(a_args[2],buffer,length)) {
+      //::printf("debug : cached_get_cmd : in cache |%s|\n",a_args[0].c_str());
+
+    } else { //POST
+
+      std::string request = "cmd=get_from_home "+a_args[2];
+
+      std::string host = a_args[0];
+      unsigned int port;
+      if(!to(a_args[1],port)) {}
+
+      nostream out;
+      net::http http(out,false); //false not verbose.
+      if(!http.start(host,port)) {
+        //return false;
+      }
+      std::string cookie;
+      if(!http.POST(request,m_cookie,buffer,length,cookie)) {
+        //return 0;
+      }
+      if(m_cookie.empty()) m_cookie = cookie;
+
+      m_cache.add(a_args[0],buffer,length);
+
+    } //POST
+
+    a_out.write(buffer,length);
+
+    if(a_session.verbose()) 
+      ::printf("cached : host=\"%s\", port=\"%s\", path=\"%s\" ok.\n",a_args[0].c_str(),a_args[1].c_str(),a_args[2].c_str());
+
+    m_cache.check_clear();
+
+  }
+public:
+  cached_get_cmd(buffer_cache<MUTEX>& a_cache)
+  :parent()
+  ,m_cache(a_cache) //m_size=16
+  {}
+  virtual ~cached_get_cmd(){}
+public:
+  cached_get_cmd(const cached_get_cmd& a_from)
+  :parent(a_from)
+  ,m_cache(a_from.m_cache)
+  {}
+  cached_get_cmd& operator=(const cached_get_cmd& a_from){
+    parent::operator=(a_from);
+    return *this;
+  }
+protected:
+  buffer_cache<MUTEX>& m_cache;
+  std::string m_cookie;
+};
+
+}}
+
+//inlib_build_use kernel
+
+#endif

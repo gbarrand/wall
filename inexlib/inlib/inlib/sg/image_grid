@@ -1,0 +1,485 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_sg_image_grid
+#define inlib_sg_image_grid
+
+#include "group"
+
+#include "event_dispatcher"
+#include "separator"
+#include "matrix"
+#include "noderef"
+#include "quadrilateral"
+#include "rgba"
+
+#include "sf_string"
+#include "sf_enum"
+#include "sf_lut"
+
+#include "../num2s"
+#include "../colorfs"
+#include "../wget"
+#include "../mathT"
+#include "../buf2lines"
+#include "../sto"
+
+// astro related :
+#include "../fradecs"
+#include "../SDSS"
+#include "../radecs"
+#include "../picmap"
+#include "../astro" //s_get_from_home()
+
+#include "../cbk/win_render"
+
+#include <cstdio> //printf
+
+namespace inlib {
+namespace sg {
+
+template <class IMAGE_NODE>
+class image_grid : public group {
+  INLIB_T_HEADER(IMAGE_NODE,image_grid,inlib::sg::image_grid,group)
+  image_grid& get_me() {return *this;}
+public:
+  sf_string name;
+  sf<unsigned int> modeling_scale_factor;
+  sf<double> sky_radius;
+  sf<double> stars_radius;
+public:
+  virtual const desc_fields& node_desc_fields() const {
+    INLIB_FIELD_DESC_NODE_CLASS(inlib::sg::image_grid)
+    static const desc_fields s_v(parent::node_desc_fields(),4, //WARNING : take care of count.
+      INLIB_ARG_FIELD_DESC(name),
+      INLIB_ARG_FIELD_DESC(modeling_scale_factor),
+      INLIB_ARG_FIELD_DESC(sky_radius),
+      INLIB_ARG_FIELD_DESC(stars_radius)
+    );
+    return s_v;
+  }
+private:
+  void add_fields(){
+    add_field(&name);
+    add_field(&modeling_scale_factor);
+    add_field(&sky_radius);
+    add_field(&stars_radius);
+  }
+protected:
+  virtual IMAGE_NODE* create_IMAGE_NODE(unsigned int) = 0;
+public:
+  virtual void render(render_action& a_action) {
+    if(touched()) {
+      update_sg(a_action);
+      reset_touched();
+    }
+    if(m_params.auto_lut.touched()||m_params.lut.touched()||m_params.colors.touched()) {
+      // m_params fields not on image_grid to avoid data reload on visible IMAGE_NODEs.
+      inlib_typename_vforcit(IMAGE_NODE*,m_IMAGE_NODEs,it) {
+        IMAGE_NODE* _img = *it;
+        _img->colors = m_params.colors;
+        _img->auto_lut = m_params.auto_lut;
+        _img->lut = m_params.lut;
+      }
+      m_params.auto_lut.reset_touched();
+      m_params.lut.reset_touched();
+      m_params.colors.reset_touched();
+    }
+    parent::render(a_action);
+  }
+
+  virtual void search(search_action& a_action) {
+    if(a_action.what()==search_action::search_node_of_class) {
+      node::search(a_action);
+      if(a_action.done()) return;
+    }
+    parent::search(a_action);
+  }
+
+public:
+  image_grid(ui& a_ui,
+             const wget& a_wget_simbad,
+             // to get pimg params and files, local or repserv :
+             bool a_local,
+             const wget& a_wget_params,const wget& a_wget_fits,
+             const std::string& a_host,unsigned int a_port,
+             const std::string& a_data_dir,
+             //
+             const lut_float& a_lut,const SOPI::cmap& a_cmap,
+             double a_min,double a_max,double a_mean,double a_rms)
+  :parent()
+  ,name() //Stripe_82_tmp, CFHTLS_1_tmp
+  ,modeling_scale_factor(0)
+  ,sky_radius(default_sky_radius())
+  ,stars_radius(default_stars_radius())
+
+  ,m_ui(a_ui)
+
+  ,m_wget_simbad(a_wget_simbad)
+
+  ,m_local(a_local)
+  ,m_wget_params(a_wget_params)
+  ,m_wget_fits(a_wget_fits)
+  ,m_host(a_host)
+  ,m_port(a_port)
+  ,m_data_dir(a_data_dir)
+
+  ,m_min(a_min)
+  ,m_max(a_max)
+  ,m_mean(a_mean)
+  ,m_rms(a_rms)
+
+  //,m_scale_factor(1)
+  ,m_scale_factor(0) //must be 0 and not 1 to enforce a create_sg in update_sg.
+
+  ,m_params(get_me(),-1)
+  {
+    add_fields();
+
+    //NOTE : do not call create_sg() in the constructor because of usage of pure virtual create_IMAGE_NODE()
+
+    m_params.auto_lut = auto_lut_none;
+    m_params.lut = a_lut;
+    m_params.colors.clear();
+   {for(unsigned int index=0;index<a_cmap.size();index++) {
+      const SOPI::color& _col = a_cmap.get_color(index);
+      m_params.colors.add(colorf(_col.r(),_col.g(),_col.b()));
+    }}
+  }
+  virtual ~image_grid(){}
+public:
+  image_grid(const image_grid& a_from)
+  :parent(a_from)
+
+  ,name(a_from.name)
+  ,modeling_scale_factor(a_from.modeling_scale_factor)
+  ,sky_radius(a_from.sky_radius)
+  ,stars_radius(a_from.stars_radius)
+
+  ,m_ui(a_from.m_ui)
+
+  ,m_wget_simbad(a_from.m_wget_simbad)
+  ,m_local(a_from.m_local)
+  ,m_wget_params(a_from.m_wget_params)
+  ,m_wget_fits(a_from.m_wget_fits)
+  ,m_host(a_from.m_host)
+  ,m_port(a_from.m_port)
+  ,m_data_dir(a_from.m_data_dir)
+
+  ,m_min(a_from.m_min)
+  ,m_max(a_from.m_max)
+  ,m_mean(a_from.m_mean)
+  ,m_rms(a_from.m_rms)
+
+  ,m_vfradecs(a_from.m_vfradecs)
+  ,m_scale_factor(a_from.m_scale_factor)
+
+  ,m_params(a_from.m_params)
+  {
+    add_fields();
+  }
+  image_grid& operator=(const image_grid& a_from){
+    parent::operator=(a_from);
+    if(&a_from==this) return *this;
+
+    name = a_from.name;
+    modeling_scale_factor = a_from.modeling_scale_factor;
+    sky_radius = a_from.sky_radius;
+    stars_radius = a_from.stars_radius;
+
+    m_local = a_from.m_local;
+    m_host = a_from.m_host;
+    m_port = a_from.m_port;
+    m_data_dir = a_from.m_data_dir;
+
+    m_min = a_from.m_min;
+    m_max = a_from.m_max;
+    m_mean = a_from.m_mean;
+    m_rms = a_from.m_rms;
+
+    m_vfradecs = a_from.m_vfradecs;
+    m_scale_factor = a_from.m_scale_factor;
+    return *this;
+  }
+public:
+  IMAGE_NODE* find_IMAGE_NODE(unsigned int a_count) {
+    if(a_count>=m_IMAGE_NODEs.size()) return 0;
+    return m_IMAGE_NODEs[a_count];
+  }
+protected:
+  bool get_corners(unsigned int a_scale /*>=1*/) {
+    m_vfradecs.clear();
+    if(name.value().empty()) return false;
+    if(m_local) {
+      std::string path = m_data_dir+"/"+name.value()+"/";
+      numas(a_scale,path);
+      path += "/files.csv";
+      if(!read_fradecs(path,m_vfradecs)) {
+        ::printf("inlib::sg::image_grid::get_corners : read_fradecs() failed for paths :\n%s\n",path.c_str());
+        return false;
+      }
+    } else {
+      std::string sep = "/"; //if repserv running on a UNIX.
+      std::string cmd;
+      cmd += s_get_from_home();
+      cmd += " ";
+      cmd += sep+"Documents"+sep+"repserv"+sep+name.value()+sep;
+      numas(a_scale,cmd);
+      cmd += sep+"files.csv";
+      char* doc;uint64 ldoc;
+      //NOTE : doc should be deleted with [].
+      std::string icookie;
+      std::string ocookie;
+      if(!m_wget_params.post(m_host,m_port,"cmd="+cmd,doc,ldoc,icookie,ocookie)) {
+        ::printf("inlib::sg::image_grid::get_corners : get files.csv failed.\n");
+        return false;
+      }
+      std::vector<std::string> lines;
+      buf2lines(doc,lines); //it is assumed that doc finished with 0.
+      delete [] doc;
+     {std::vector<std::string> wrds;
+      double vals[8];
+      inlib_vforcit(std::string,lines,it) {
+        if((*it).empty()) continue; //last line.
+        words(*it,",",false,wrds);
+        if(wrds.size()<9) {
+          ::printf("inlib::sg::image_grid::get_corners : not 9 words in line \"%s\".\n",(*it).c_str());
+          m_vfradecs.clear();
+          return false;
+        }
+        for(unsigned int index=0;index<8;index++) {
+          if(!to<double>(wrds[1+index],vals[index])) {
+            ::printf("inlib::sg::image_grid::get_corners : \"%s\" not a double.\n",wrds[1+index].c_str());
+            m_vfradecs.clear();
+            return false;
+          }
+        }      
+        m_vfradecs.push_back(fradecs(wrds[0],vals));        
+      }}
+    }
+    return true;
+  }
+
+  void create_sg(unsigned int a_scale /*>=1*/) {
+    clear();
+    m_images.clear();
+    m_IMAGE_NODEs.clear();
+    if(name.value().empty()) return;
+    if(m_vfradecs.empty()) return;
+
+    //::printf("debug : image_grid : create %d nodes.\n",m_vfradecs.size());
+
+    //dra = 0.164; //deg
+    //2*radius*sin(dra*0.5) = size on circonference.
+    //sky_radius = 1000 -> 2.86
+
+    add(new noderef(m_images));
+
+    separator* all_sep = new separator;
+    all_sep->add(new matrix());
+
+    double radecs[8];
+    std::vector<vec3f> vcs;
+    std::vector<vec3f> qvcs(4);
+    float qradius = 1.001f;
+    vec3f center;
+    std::string path;
+    unsigned int count = 0;
+    inlib_vforcit(fradecs,m_vfradecs,it){
+      (*it).get_corners(radecs);
+      radecs_center(radecs,sky_radius.value(),vcs,center);
+
+      path = "/"+name.value()+"/";
+      numas(a_scale,path);
+      path +="/"+(*it).sid();
+
+      separator* sep = new separator;
+    
+     {images* _params = new images(*this,count);
+      _params->auto_lut = m_params.auto_lut;
+      _params->lut = m_params.lut;
+      _params->colors = m_params.colors;
+     {vec3f& _qp = qvcs[0];_qp = vcs[0];_qp += center;_qp *= qradius;}
+     {vec3f& _qp = qvcs[1];_qp = vcs[1];_qp += center;_qp *= qradius;}
+     {vec3f& _qp = qvcs[2];_qp = vcs[2];_qp += center;_qp *= qradius;}
+     {vec3f& _qp = qvcs[3];_qp = vcs[3];_qp += center;_qp *= qradius;}
+      _params->corners.set_values(qvcs);
+      sep->add(_params);}
+
+      matrix* tsf = new matrix;
+      tsf->mul_translate(center.x(),center.y(),center.z());
+      sep->add(tsf);
+
+      sep->add(new event_dispatcher()); //for image_manip.
+
+      rgba* mat = new rgba;
+      mat->color = colorf_white();
+      sep->add(mat);
+
+      IMAGE_NODE* img = create_IMAGE_NODE(count);count++;
+
+      img->sky_radius = sky_radius.value();
+      img->stars_radius = stars_radius.value();
+      img->back_color = colorf_lightgrey();
+    //img->yswap = true;
+      img->expand = true;
+      img->corners.set_values(vcs);
+      img->data_file = path;
+      img->radecs.setValues(0,8,radecs);
+      img->auto_lut = m_params.auto_lut;
+      img->lut = m_params.lut;
+      img->colors = m_params.colors;
+      m_IMAGE_NODEs.push_back(img);
+      sep->add(img);
+
+      all_sep->add(sep);
+    }
+    m_images.add(all_sep);
+  }
+
+  void update_sg(matrix_action& a_action) {        
+    if(name.value().empty()) return;
+    unsigned int _scale;
+    power<unsigned int,unsigned int>(2,modeling_scale_factor.value(),_scale);
+    if(_scale!=m_scale_factor) {
+    //a_action.out() << "debug : inlib::sg::image_grid : pass to modeling scale factor " << _scale << std::endl;
+      if(!get_corners(_scale)) {}
+      create_sg(_scale);
+      m_scale_factor = _scale;
+    }
+  }
+
+protected:
+  ui& m_ui;
+
+  const wget& m_wget_simbad;
+  bool m_local;
+  const wget& m_wget_params;
+  const wget& m_wget_fits;
+  std::string m_host;
+  unsigned int m_port;
+  std::string m_http_cookie;
+  std::string m_data_dir;
+
+  double m_min,m_max,m_mean,m_rms;
+
+  std::vector<fradecs> m_vfradecs;
+  SDSS::catalog m_catalog;
+
+  group m_images;
+  unsigned int m_scale_factor;
+  std::vector<IMAGE_NODE*> m_IMAGE_NODEs;
+
+protected:
+  class images : public quadrilateral {
+  private:
+    typedef quadrilateral parent;
+  public:
+    static const std::string& s_class() {
+      static const std::string s_v("inlib::sg::image_grid::images");
+      return s_v;
+    }
+  public:
+    virtual void* cast(const std::string& a_class) const {
+      if(void* p = cmp_cast<images>(this,a_class)) return p;
+      return parent::cast(a_class);
+    }
+    virtual const std::string& s_cls() const {return s_class();}
+  public:
+    sf_enum<auto_lut_policy> auto_lut;
+    sf_lut<float> lut;
+    mf_vec<colorf,float> colors;
+    //sf<unsigned int> zoom;
+  public:
+    virtual const desc_fields& node_desc_fields() const {
+      INLIB_FIELD_DESC_NODE_CLASS(inlib::sg::images)
+      static const desc_fields s_v(parent::node_desc_fields(),3, //WARNING : take care of count.
+        INLIB_ARG_FIELD_DESC_ENUMS_BEG(auto_lut,3)
+          "auto_lut_none",auto_lut_none,
+          "auto_lut_min_max",auto_lut_min_max,
+          "auto_lut_mean_rms",auto_lut_mean_rms
+        INLIB_ARG_FIELD_DESC_ENUMS_END,
+        INLIB_ARG_FIELD_DESC(lut),
+        INLIB_ARG_FIELD_DESC(colors)
+        //INLIB_ADD_FIELD_DESC(zoom)
+      );
+      return s_v;
+    }
+  private:
+    void add_fields(){
+      add_field(&auto_lut);
+      add_field(&lut);
+      add_field(&colors);
+      //add_field(&zoom);
+    }
+  public:
+    virtual void render(render_action& a_action) {
+      if(touched()) {
+        m_grid.m_params.colors = colors;
+        m_grid.m_params.auto_lut = auto_lut;
+        m_grid.m_params.lut = lut;
+        reset_touched();
+        if(m_grid.m_params.auto_lut.touched()||m_grid.m_params.lut.touched()||m_grid.m_params.colors.touched()) {
+          if( (m_grid.m_params.auto_lut.value()!=auto_lut_none) && (m_count>=0) ) {
+            IMAGE_NODE* tile = m_grid.find_IMAGE_NODE(m_count);
+            if(tile) {
+              if(m_grid.m_params.auto_lut.value()==auto_lut_min_max) {
+                m_grid.m_params.lut = lut_float(float(m_grid.m_min),float(m_grid.m_max),lut.value().coln());
+                m_grid.m_params.auto_lut = auto_lut_none;
+              } else if(m_grid.m_params.auto_lut.value()==auto_lut_mean_rms) {
+                double mn = m_grid.m_mean-m_grid.m_rms*0.5;
+                double mx = m_grid.m_mean+m_grid.m_rms*0.5;
+                m_grid.m_params.lut = lut_float(float(mn),float(mx),lut.value().coln());
+                m_grid.m_params.auto_lut = auto_lut_none;
+              }
+            }
+          } 
+          m_grid.m_ui.add_work(new cbk::win_render(m_grid.m_ui));
+        }
+      }
+      parent::render(a_action);
+    }  
+  public:
+    images(image_grid& a_grid,int a_count)
+    :parent()
+    ,auto_lut(auto_lut_none)
+    ,lut()
+    ,colors()
+    //,zoom(1)
+    ,m_grid(a_grid)
+    ,m_count(a_count)
+    {
+      add_fields();
+    }
+    virtual ~images(){}
+  public:
+    images(const images& a_from)
+    :parent(a_from)
+    ,auto_lut(a_from.auto_lut)
+    ,lut(a_from.lut)
+    ,colors(a_from.colors)
+    //,zoom(a_from.zoom)
+    ,m_grid(a_from.m_grid)
+    ,m_count(a_from.m_count)
+    {
+      add_fields();
+    }
+    images& operator=(const images& a_from){
+      parent::operator=(a_from);
+      auto_lut = a_from.auto_lut;
+      lut = a_from.lut;
+      colors = a_from.colors;
+      //zoom = a_from.zoom;
+      return *this;
+    }
+  protected:
+    image_grid& m_grid;
+    int m_count;
+  };
+
+  images m_params;
+};
+
+}}
+
+#endif

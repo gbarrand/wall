@@ -1,0 +1,87 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_wall_evt_user
+#define inlib_wall_evt_user
+
+namespace inlib {
+namespace wall {
+
+inline int EVT_USER_QUIT()               {return 100;}
+inline int EVT_USER_UPDATE_KEY_MOTION()  {return 101;}
+inline int EVT_USER_FILE()               {return 104;}
+inline int EVT_USER_WINDOW_MASTER_SIZE() {return 107;}
+inline int EVT_USER_STRING()             {return 109;}
+inline int EVT_USER_DOCUMENT()           {return 110;}
+inline int EVT_USER_GET_FILE()           {return 114;}
+inline int EVT_USER_COMMAND()            {return 142;}
+inline int EVT_USER_SYNC_MOVE()          {return 143;}
+inline int EVT_USER_ANIM()               {return 144;}
+inline int EVT_USER_SYNC_ANIM()          {return 145;}
+inline int EVT_USER_SYNC_SCREEN()        {return 146;}
+inline int EVT_USER_PICK_SCREEN()        {return 147;}
+
+inline int EVT_USER_START_SYNC()         {return 148;}
+inline int EVT_USER_START_PICK()         {return 149;}
+inline int EVT_USER_GET_URL()            {return 150;}
+inline int EVT_USER_POST_URL()           {return 151;}
+inline int EVT_USER_UPDATE_NODE()        {return 152;}
+
+}}
+
+#include "../S_STRING"
+
+namespace inlib {
+namespace wall {
+
+INLIB_GLOBAL_STRING(EVT_USER_QUIT)
+INLIB_GLOBAL_STRING(EVT_USER_UPDATE_KEY_MOTION)
+INLIB_GLOBAL_STRING(EVT_USER_FILE)
+INLIB_GLOBAL_STRING(EVT_USER_WINDOW_MASTER_SIZE)
+INLIB_GLOBAL_STRING(EVT_USER_STRING)
+INLIB_GLOBAL_STRING(EVT_USER_DOCUMENT)
+INLIB_GLOBAL_STRING(EVT_USER_GET_FILE)
+INLIB_GLOBAL_STRING(EVT_USER_COMMAND)
+INLIB_GLOBAL_STRING(EVT_USER_SYNC_MOVE)
+INLIB_GLOBAL_STRING(EVT_USER_ANIM)
+INLIB_GLOBAL_STRING(EVT_USER_SYNC_ANIM)
+INLIB_GLOBAL_STRING(EVT_USER_SYNC_SCREEN)
+INLIB_GLOBAL_STRING(EVT_USER_PICK_SCREEN)
+INLIB_GLOBAL_STRING(EVT_USER_START_SYNC)
+INLIB_GLOBAL_STRING(EVT_USER_START_PICK)
+INLIB_GLOBAL_STRING(EVT_USER_GET_URL)
+INLIB_GLOBAL_STRING(EVT_USER_POST_URL)
+INLIB_GLOBAL_STRING(EVT_USER_UPDATE_NODE)
+
+INLIB_GLOBAL_STRING(unknown)
+
+#define EVT_USER_TO_STRING(a__user_code) \
+  if(a_code==a__user_code()) return s_##a__user_code();
+
+inline const std::string& user_code_to_string(int a_code) {
+  EVT_USER_TO_STRING(EVT_USER_QUIT)
+  EVT_USER_TO_STRING(EVT_USER_UPDATE_KEY_MOTION)
+  EVT_USER_TO_STRING(EVT_USER_FILE)
+  EVT_USER_TO_STRING(EVT_USER_WINDOW_MASTER_SIZE)
+  EVT_USER_TO_STRING(EVT_USER_STRING)
+  EVT_USER_TO_STRING(EVT_USER_DOCUMENT)
+  EVT_USER_TO_STRING(EVT_USER_GET_FILE)
+  EVT_USER_TO_STRING(EVT_USER_GET_URL)
+  EVT_USER_TO_STRING(EVT_USER_POST_URL)
+  EVT_USER_TO_STRING(EVT_USER_UPDATE_NODE)
+  EVT_USER_TO_STRING(EVT_USER_COMMAND)
+  EVT_USER_TO_STRING(EVT_USER_SYNC_MOVE)
+  EVT_USER_TO_STRING(EVT_USER_ANIM)
+  EVT_USER_TO_STRING(EVT_USER_SYNC_ANIM)
+  EVT_USER_TO_STRING(EVT_USER_START_SYNC)
+  EVT_USER_TO_STRING(EVT_USER_SYNC_SCREEN)
+  EVT_USER_TO_STRING(EVT_USER_START_PICK)
+  EVT_USER_TO_STRING(EVT_USER_PICK_SCREEN)
+  return s_unknown();
+}
+
+#undef EVT_USER_TO_STRING
+
+}}
+
+#endif

@@ -1,0 +1,100 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_pimg
+#define inlib_pimg
+
+#include "keyvals"
+
+#include "S_STRING"
+#include "sto"
+#include "strip"
+#include "picmap"
+#include "lut"
+
+namespace inlib {
+namespace pimg {
+
+INLIB_GLOBAL_STRING_VALUE(param_ra,ra)
+INLIB_GLOBAL_STRING_VALUE(param_dec,dec)
+INLIB_GLOBAL_STRING_VALUE(param_radecs,radecs)
+INLIB_GLOBAL_STRING_VALUE(param_min,min)
+INLIB_GLOBAL_STRING_VALUE(param_max,max)
+INLIB_GLOBAL_STRING_VALUE(param_mean,mean)
+INLIB_GLOBAL_STRING_VALUE(param_rms,rms)
+INLIB_GLOBAL_STRING_VALUE(param_colormap,colormap)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_0,radecs_0)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_1,radecs_1)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_2,radecs_2)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_3,radecs_3)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_4,radecs_4)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_5,radecs_5)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_6,radecs_6)
+//INLIB_GLOBAL_STRING_VALUE(param_radecs_7,radecs_7)
+INLIB_GLOBAL_STRING_VALUE(param_lut_min,lut_min)
+INLIB_GLOBAL_STRING_VALUE(param_lut_max,lut_max)
+INLIB_GLOBAL_STRING_VALUE(param_lut_coln,lut_coln)
+INLIB_GLOBAL_STRING_VALUE(param_start_level,start_level)
+
+inline bool get_params(const std::vector<std::string>& a_lines,
+                       float& a_ra,float& a_dec,
+                       //double a_radecs[8],
+                       lut<float>& a_lut,SOPI::cmap& a_cmap,
+                       double& a_min,double& a_max,double& a_mean,double& a_rms,unsigned int& a_start_level) {
+  typedef std::pair<std::string,std::string> keyval;
+  std::vector<keyval> keyvals;
+  if(!lines_to_keyvals(a_lines,keyvals)) return false;
+  unsigned int found = 0;
+  float lut_min,lut_max;
+  unsigned int lut_coln;
+  inlib_vforit(keyval,keyvals,it) {
+    strip((*it).first);
+    strip((*it).second);
+    std::string& key = (*it).first;
+    std::string& value = (*it).second;
+         if(key==s_param_ra())   {to(value,a_ra);found++;}
+    else if(key==s_param_dec())  {to(value,a_dec);found++;}
+    else if(key==s_param_min())  {to(value,a_min);found++;}
+    else if(key==s_param_max())  {to(value,a_max);found++;}
+    else if(key==s_param_mean()) {to(value,a_mean);found++;}
+    else if(key==s_param_rms())  {to(value,a_rms);found++;}
+    else if(key==s_param_start_level()) {to(value,a_start_level);found++;}
+
+    else if(key==s_param_lut_min()) {to(value,lut_min);found++;}
+    else if(key==s_param_lut_max()) {to(value,lut_max);found++;}
+    else if(key==s_param_lut_coln()) {to(value,lut_coln);found++;}
+
+    //else if(key==s_param_radecs_0()) {to(value,a_radecs[0]);found++;}
+    //else if(key==s_param_radecs_1()) {to(value,a_radecs[1]);found++;}
+    //else if(key==s_param_radecs_2()) {to(value,a_radecs[2]);found++;}
+    //else if(key==s_param_radecs_3()) {to(value,a_radecs[3]);found++;}
+    //else if(key==s_param_radecs_4()) {to(value,a_radecs[4]);found++;}
+    //else if(key==s_param_radecs_5()) {to(value,a_radecs[5]);found++;}
+    //else if(key==s_param_radecs_6()) {to(value,a_radecs[6]);found++;}
+    //else if(key==s_param_radecs_7()) {to(value,a_radecs[7]);found++;}
+
+    else if(key==s_param_colormap()) {
+      if(!SOPI::stocmap(value,a_cmap)) return false;
+      found++;
+    }
+  }
+  if((found!=11)&&(found!=19)) return false;
+  a_lut = lut<float>(lut_min,lut_max,lut_coln);
+  return true;
+}
+
+/*
+//#include "file"
+inline bool get_params(const std::string& a_path,
+                       float& a_ra,float& a_dec,double a_radecs[8],
+                       lut<float>& a_lut,SOPI::cmap& a_cmap,
+                       double& a_min,double& a_max,double& a_mean,double& a_rms) {
+  std::vector<std::string> lines;
+  if(!file::read(a_path,lines)) return false;
+  return get_params(lines,a_ra,a_dec,a_radecs,a_lut,a_cmap,a_min,a_max,a_mean,a_rms);
+}
+*/
+
+}}
+
+#endif

@@ -1,0 +1,87 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_wall_rbuf
+#define inlib_wall_rbuf
+
+#include "../typedefs"
+#include "../platform"
+
+#include <cstring> //memcpy
+
+#ifdef INLIB_MEM
+#include "../mem"
+#endif
+
+namespace inlib {
+namespace wall {
+
+class rbuf {
+#ifdef INLIB_MEM
+  static const std::string& s_class() {
+    static const std::string s_v("inlib::wall::rbuf");
+    return s_v;
+  }
+#endif
+public:
+  const char* buf() const {return m_buffer;}
+  //uint32 length() const {return m_pos-m_buffer;}
+public:
+  rbuf(uint32 a_size = 1024)
+  :m_size(0)
+  ,m_buffer(0)
+  ,m_max(0)
+  ,m_pos(0)
+  {
+#ifdef INLIB_MEM
+    mem::increment(s_class().c_str());
+#endif
+    m_buffer = new char[a_size];
+    if(!m_buffer) return;
+    m_size = a_size;
+    m_max = m_buffer+m_size;
+    m_pos = m_buffer;
+  }
+  virtual ~rbuf(){
+    delete [] m_buffer;
+#ifdef INLIB_MEM
+    mem::decrement(s_class().c_str());
+#endif
+  }
+protected:
+  rbuf(const rbuf&){
+#ifdef INLIB_MEM
+    mem::decrement(s_class().c_str());
+#endif
+  }
+  rbuf& operator=(const rbuf&){return *this;}
+public:
+  template <class T>
+  bool read(T& a_v) {
+    size_t sz = sizeof(T);
+    if((m_pos+sz)>m_max) return false;
+    if(is_little_endian()) {
+      ::memcpy(&a_v,m_pos,sz);
+    } else {
+      char* pos = (char*)&a_v;
+      for(unsigned int i=0;i<sz;i++,pos++) *pos = m_pos[sz-1-i];
+    }
+    m_pos += sz;
+    return true;
+  }
+  bool read(unsigned int a_sz,char* a_b) {
+    if((m_pos+a_sz)>m_max) return false;
+    ::memcpy(a_b,m_pos,a_sz);
+    m_pos += a_sz;
+    return true;
+  }
+protected:
+  uint32 m_size;
+  char* m_buffer;
+  char* m_max;
+  char* m_pos;
+};
+
+}}
+
+#endif

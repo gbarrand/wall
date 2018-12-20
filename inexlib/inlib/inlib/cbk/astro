@@ -1,0 +1,166 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_cbk_astro
+#define inlib_cbk_astro
+
+#include "../sg/separator"
+#include "../sg/infos"
+#include "../sg/matrix"
+#include "../sg/rgba"
+#include "../sg/circle"
+#include "../sg/draw_style"
+
+#include "../astro"
+
+namespace inlib {
+
+inline sg::separator* create_sg_equator(double a_sky_radius) {
+  sg::separator* all_sep = new sg::separator;
+
+  sg::infos* infos = new sg::infos; //for action_delete_equator.
+  infos->add_title(s_equator());
+  all_sep->add(infos);
+
+  all_sep->add(new sg::matrix); //for move manip.
+
+  unsigned int steps = 4*360; //4 steps per degree.
+  float lw = 3;
+
+ {sg::separator* sep = new sg::separator;
+  all_sep->add(sep);
+
+  sg::rgba* mat = new sg::rgba;
+  mat->color = colorf_red();
+  sep->add(mat);
+
+  sg::draw_style* ds = new sg::draw_style;
+  ds->style = sg::draw_lines;
+  ds->line_width = lw;
+  sep->add(ds);
+
+  sg::circle* _circle = new sg::circle;
+  _circle->radius = float(a_sky_radius);
+  _circle->steps = steps;
+  sep->add(_circle);}
+
+ {sg::separator* sep = new sg::separator;
+  all_sep->add(sep);
+
+  sg::rgba* mat = new sg::rgba;
+  mat->color = colorf_blue();
+  sep->add(mat);
+
+  sg::draw_style* ds = new sg::draw_style;
+  ds->style = sg::draw_lines;
+  ds->line_width = lw;
+  sep->add(ds);
+
+  sg::matrix* tsf = new sg::matrix;
+  tsf->set_rotate(vec3f::s_x(),fhalf_pi());
+  sep->add(tsf);
+
+  sg::circle* _circle = new sg::circle;
+  _circle->radius = float(a_sky_radius);
+  _circle->steps = steps;
+  sep->add(_circle);}
+
+  return all_sep;
+}
+
+}
+
+#include "../sg/view_evd"
+#include "../radecs"
+
+namespace inlib {
+namespace cbk {
+
+inline sg::return_action action_add_equator(sg::gui_viewer& a_gv) {
+  sg::view_evd* _evd = sg::cast_view_evd(a_gv);
+  if(!_evd) return sg::return_none;
+  if(!_evd->is_evd()) _evd->create_sg_evd();
+  _evd->static_sg().add(create_sg_equator(default_sky_radius()));
+  a_gv.hide_main_menu();
+  return sg::return_to_render;     
+}
+
+inline sg::return_action action_delete_equator(sg::gui_viewer& a_gv) {
+  sg::view_evd* _evd = sg::cast_view_evd(a_gv);
+  if(!_evd) return sg::return_none;
+
+  sg::separator& ssep = _evd->static_sg();
+
+ {sg::search_action sa(a_gv.out());
+  const sg::paths_t& paths = sg::find_paths<sg::infos>(sa,ssep);
+  inlib_vforcit(sg::path_t,paths,it) {
+    const sg::path_t& p = *it;
+    sg::infos* _infos = sg::tail<sg::infos>(p);
+    if(_infos) {
+      std::string title;
+      if(_infos->find_title(title) && (title==s_equator()) ) {
+        sg::group* all_sep = sg::container<sg::group>(p);
+        if(all_sep) {
+          sg::group* ssep = sg::container_container<sg::group>(p);
+          if(ssep) {
+            ssep->remove(all_sep);
+            delete all_sep;
+          }
+        }
+      }
+    }    
+  }}
+
+  return sg::return_to_render;     
+}
+
+}}
+
+#include "../sg/view_astro"
+
+namespace inlib {
+namespace cbk {
+
+inline sg::return_action action_pimg_set_host(sg::gui_viewer& a_gv,sg::entries& a_widget,const sg::pos_data& a_data){
+  const std::string& where = a_widget.values.values()[0];
+  sg::view_astro* _vastro = sg::cast_view_astro(a_gv);
+  if(!_vastro) return sg::return_none;
+
+  inlib_vforcit(xml::srv,_vastro->srvs()._srvs(),it) {
+    if((*it).name()==where) {
+      _vastro->set_host((*it).host());
+      _vastro->set_port((*it).port());
+      a_gv.pop_warn(a_data,"done",false);
+      return sg::return_to_render;     
+    }
+  }
+
+  a_gv.pop_warn(a_data,"no srvs");
+  return sg::return_to_render;     
+}
+
+inline sg::return_action action_pimg_host(sg::gui_viewer& a_gv,const sg::pos_data& a_data) {
+  sg::view_astro* _vastro = sg::cast_view_astro(a_gv);
+  if(!_vastro) return sg::return_none;
+
+  if(_vastro->srvs()._srvs().empty()) {
+    a_gv.pop_warn(a_data,"no srvs");
+    return sg::return_to_render;
+  }
+
+  sg::entries* entries = new sg::entries(a_gv.ttf());
+  a_gv.set_style(*entries);
+
+ {std::vector<std::string> opts;
+  inlib_vforcit(xml::srv,_vastro->srvs()._srvs(),it) opts.push_back((*it).name());
+  entries->add_opts("host",opts[0],opts);}
+
+  sg::add_callback(a_gv,*entries,action_pimg_set_host,a_data);
+
+  a_gv.show_widget(a_data,entries);
+  return sg::return_to_render;
+}
+
+}}
+
+#endif

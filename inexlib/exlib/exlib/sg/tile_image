@@ -1,0 +1,300 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file exlib.license for terms.
+
+#ifndef exlib_sg_tile_image
+#define exlib_sg_tile_image
+
+//NOTE : there is a clash with TBYTE between fitsio.h that defines
+//       it as a cpp macro and WinNT.h that defines it as a typedef.
+//       As windows.h is indirectly included by inlib/wroot/date through
+//       inlib/pimg_root, this file must be included first.
+#include <inlib/pimg_root>
+
+#include "text_freetype_marker"
+
+#include <inlib/sg/cfitsio_stars>
+#include <inlib/sg/sf_string>
+#include <inlib/sg/sf_vec3f>
+
+#include <inlib/nostream>
+#include <inlib/SDSS>
+#include <inlib/wget>
+#include <inlib/buffer>
+#include <inlib/sep>
+#include <inlib/sg/strings>
+
+#include "../fits_image"
+#include "../zlib"
+
+#ifdef EXLIB_SG_TILE_IMAGE_USE_HDF5
+#include "../hdf5/pimg"
+#endif
+
+//#include <inlib/pimg_root>
+
+namespace exlib {
+namespace sg {
+
+class tile_image : public inlib::sg::cfitsio_stars {
+  INLIB_NODE(tile_image,exlib::sg::tile_image,inlib::sg::cfitsio_stars)
+public:
+  inlib::sg::sf_string data_file;
+public:
+  virtual const inlib::sg::desc_fields& node_desc_fields() const {
+    INLIB_FIELD_DESC_NODE_CLASS(exlib::sg::tile_image)
+    static const inlib::sg::desc_fields s_v(parent::node_desc_fields(),1,
+      INLIB_ARG_FIELD_DESC(data_file)
+    );
+    return s_v;
+  }
+private:
+  void add_fields(){
+    add_field(&data_file);
+  }
+public:
+  virtual void render(inlib::sg::render_action& a_action) {
+    //if(touched()) {
+      update_sg(a_action.out(),a_action); //it touches fields.
+    //}    
+    parent::render(a_action);
+  }
+
+  virtual void is_visible(inlib::sg::visible_action& a_action) {
+    if(_is_visible(a_action)) a_action.increment();
+  }
+
+public:
+  tile_image(bool a_fits_local,
+             const inlib::wget& a_fits_wget,std::string& a_fits_cookie,
+             const std::string& a_fits_host,unsigned int a_fits_port,
+             const std::string& a_fits_dir, //if local.
+             const inlib::wget& a_simbad_wget, //warning : we keep the ref.
+             const inlib::wget& a_stars_wget, //warning : we keep the ref.
+             const std::string& a_stars_host,unsigned int a_stars_port,const std::string& a_stars_dir,
+             inlib::SDSS::catalog& a_stars_catalog)
+  //WARNING : in the below line, parent cstor must only store m_ttf ref and not use it.
+  :parent(m_ttf,a_simbad_wget,a_fits_local,a_stars_wget,a_stars_host,a_stars_port,a_stars_dir,a_stars_catalog)
+  ,data_file()
+
+  ,m_fits_local(a_fits_local)
+  ,m_fits_wget(a_fits_wget)  
+  ,m_fits_cookie(a_fits_cookie)
+  ,m_fits_host(a_fits_host)
+  ,m_fits_port(a_fits_port)
+  ,m_fits_dir(a_fits_dir)
+
+  ,m_pick_action(m_out,100,100,0,0,2,2)
+  {
+  //m_ttf.font = inlib::sg::font_arialbd_ttf();
+    m_ttf.font = inlib::sg::font_helvetica_ttf();
+    add_fields();
+  }
+  virtual ~tile_image(){}
+protected:
+//public: //below parent() constructor not clean relative to wget refs
+  tile_image(const tile_image& a_from)
+  //:parent(a_from) //no.
+  //warning : in the below line take care of m_ttf, it can't be a_from.m_ttf which is a ref.
+  :parent(m_ttf,a_from.m_simbad_wget,
+          a_from.m_fits_local,
+          a_from.m_stars_wget,a_from.m_stars_host,a_from.m_stars_port,a_from.m_stars_dir,a_from.m_stars_catalog)
+
+  ,data_file(a_from.data_file)
+
+  ,m_fits_local(a_from.m_fits_local)
+  ,m_fits_wget(a_from.m_fits_wget)  
+  ,m_fits_cookie(a_from.m_fits_cookie)
+  ,m_fits_host(a_from.m_fits_host)
+  ,m_fits_port(a_from.m_fits_port)
+  ,m_fits_dir(a_from.m_fits_dir)
+
+  ,m_ttf(a_from.m_ttf)
+  ,m_pick_action(a_from.m_pick_action)
+  {
+    add_fields();
+  }
+  tile_image& operator=(const tile_image& a_from) {
+    parent::operator=(a_from);
+    if(&a_from==this) return *this;
+    data_file = a_from.data_file;
+
+    m_ttf = a_from.m_ttf;
+    return *this;
+  }
+protected:
+  bool _is_visible(const inlib::sg::matrix_action& a_action) {
+    if(corners.size()!=4) return false;
+    const inlib::sg::state& _state = a_action.state();
+    unsigned int ww = _state.m_ww;
+    unsigned int wh = _state.m_wh;
+  //inlib::sg::pick_action action(a_action.out(),ww,wh,0,float(ww),0,float(wh));
+    m_pick_action.set_win_size(ww,wh);
+    m_pick_action.set_area(0,float(ww),0,float(wh));
+    m_pick_action.set_stop_at_first(true);
+    m_pick_action.matrix_action::operator=(a_action); //IMPORTANT.
+    int old_cur = m_pick_action.cur(); //not 0.
+    f12 xyzs,nms;
+    _front(xyzs,nms);
+    m_pick_action.add__primitive(*this,inlib::gl::triangle_fan(),12,xyzs,true);
+    if(m_pick_action.cur()!=old_cur) return false;
+    if(!m_pick_action.node()) return false;
+    return true;
+  }
+
+  static bool send_cmd_get(std::ostream& a_out,
+                           const inlib::wget& a_wget,const std::string& a_host,unsigned int a_port,std::string& a_cookie,
+                           const std::string& a_cmd,
+                           char*& a_doc,inlib::uint64& a_ldoc) {
+    //NOTE : a_doc should be deleted with [].
+    std::string ocookie;
+    if(!a_wget.post(a_host,a_port,"cmd="+a_cmd,a_doc,a_ldoc,a_cookie,ocookie)) return false;
+    if(a_cookie.empty()) a_cookie = ocookie;
+    return true;
+  }
+
+  virtual void update_sg(std::ostream& a_out,const inlib::sg::matrix_action& a_action) {
+    //virtual for wall::sg::tile_image.
+    if(!_is_visible(a_action)) {
+      //::printf("debug : tile_image : not visible %s\n",inlib::base_name(data_file).c_str());
+      //if(buffer.size()) ::printf("debug : tile_image : clear buffer : %s\n",inlib::base_name(data_file).c_str());
+      buffer.clear(); //may be touched, but ok since render() executes update_sg() whatever.
+      return;
+    }
+    if(buffer.size() && columns.value() && rows.value() ) return; //visible and loaded, done.
+    //::printf("debug : tile_image : load %s\n",inlib::base_name(data_file).c_str());
+    if(!load_data(a_out)) {
+      a_out << "exlib::sg::tile_image::update_sg : load_data() failed." << std::endl;
+    }
+  }
+
+  bool load_local(std::ostream& a_out,unsigned int a_ihdu,unsigned int a_slice) {
+    unsigned int width,height;
+    size_t sz;
+    int _bitpix;
+    std::string path = m_fits_dir+data_file.value();
+
+    bool is;
+    if(inlib::file::is_fits(path,is)&&is) {
+      char* _buffer = fits_image::read_slice(a_out,path,a_ihdu,a_slice,width,height,sz,_bitpix);
+      if(!_buffer) {buffer.clear();return false;}
+#ifdef INLIB_MEM
+      inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+      //::printf("debug : tile_image::load_local : get buffer %d %d %d : %d\n",sz,width,height,_bitpix);
+      buffer.setValues(0,sz,_buffer);
+      delete [] _buffer;
+      columns = width;
+      rows = height;
+      bitpix = inlib::cfitsio_bitpix_code(_bitpix); //it is a cast toward enums.
+
+#ifdef EXLIB_SG_TILE_IMAGE_USE_HDF5
+    } else if(inlib::file::is_hdf(path,is)&&is) {
+      hid_t hid;
+      if(!open_read(a_out,path,hid)) {buffer.clear();return false;}
+      float* _buffer;
+      if(!::read(a_out,hid,width,height,_buffer,false)) {
+        buffer.clear();
+        return false;
+      }
+      //::printf("debug : tile_image::load_local : hdf5 : get buffer:  %d %d\n",width,height);
+      sz = width*height*sizeof(float);
+      buffer.setValues(0,sz,(char*)_buffer);
+      delete [] _buffer;
+      columns = width;
+      rows = height;
+      bitpix = inlib::float_img;
+#endif
+
+    } else if(inlib::file::is_root(path,is)&&is) {
+      inlib::rroot::file* fid;
+      if(!open_read(a_out,path,fid)) {buffer.clear();return false;}
+      float* _buffer;
+      if(!::read(a_out,fid,width,height,_buffer,false)) {
+        buffer.clear();
+        return false;
+      }
+      //::printf("debug : tile_image::load_local : root : get buffer:  %d %d\n",width,height);
+      sz = width*height*sizeof(float);
+      buffer.setValues(0,sz,(char*)_buffer);
+      delete [] _buffer;
+      columns = width;
+      rows = height;
+      bitpix = inlib::float_img;
+    }
+
+    return true;
+  }
+
+public: //for wall/screen_dispatch
+  virtual bool load_doc(std::ostream& a_out,const char* a_doc,inlib::uint64 a_ldoc,
+                        unsigned int a_ihdu,unsigned int a_slice){
+    unsigned int width,height;
+    size_t sz;
+    int _bitpix;
+    char* _buffer = 0;
+    bool is;
+    if(inlib::is_gzip((unsigned int)a_ldoc,a_doc,is)&&is) {
+      char* udoc = new char[(size_t)(10*a_ldoc)];
+      unsigned int rsz;
+      if(gunzip_buffer(a_out,(unsigned int)a_ldoc,a_doc,(unsigned int)(10*a_ldoc),udoc,rsz)) {
+        _buffer = fits_image::read_slice(a_out,rsz,udoc,a_ihdu,a_slice,width,height,sz,_bitpix);
+      }
+      delete [] udoc;
+    } else {
+      _buffer = fits_image::read_slice(a_out,a_ldoc,a_doc,a_ihdu,a_slice,width,height,sz,_bitpix);
+    }
+    if(!_buffer) {buffer.clear();return false;}
+#ifdef INLIB_MEM
+    inlib::mem::decrement(inlib::s_new().c_str());
+#endif
+    //::printf("debug : tile_image : get buffer %d %d %d : %d\n",sz,width,height,_bitpix);
+    buffer.setValues(0,sz,_buffer);
+    delete [] _buffer;
+    columns = width;
+    rows = height;
+    bitpix = inlib::cfitsio_bitpix_code(_bitpix); //it is a cast toward enums.
+    return true;
+  }
+protected:
+  bool load_data(std::ostream& a_out) {
+    unsigned int ihdu = 1;
+    unsigned int slice = 0;
+    if(m_fits_local) {
+      return load_local(a_out,ihdu,slice);
+    } else {
+      std::string sep = "/"; //if repserv running on a UNIX.
+      std::string cmd;
+      cmd += inlib::s_get_from_home();
+      cmd += " ";
+      cmd += sep+"Documents"+sep+"repserv"+data_file.value(); //data_file starts with a slash.
+      char* doc;inlib::uint64 ldoc;
+      if(!send_cmd_get(a_out,m_fits_wget,m_fits_host,m_fits_port,m_fits_cookie,cmd,doc,ldoc)) {
+        buffer.clear();
+        return false;
+      }
+      bool status = load_doc(a_out,doc,ldoc,ihdu,slice);
+      delete [] doc;
+      return status;
+    }
+  }
+
+protected:
+  bool m_fits_local;
+  const inlib::wget& m_fits_wget;
+  std::string& m_fits_cookie;
+  std::string m_fits_host;
+  unsigned int m_fits_port;
+  std::string m_fits_dir;
+
+  text_freetype_marker m_ttf;
+  inlib::nostream m_out;
+  inlib::sg::pick_action m_pick_action; //optimization.
+};
+
+}}
+
+//exlib_build_use inlib inlib_glutess freetype
+//exlib_build_use cfitsio zlib
+//exlib_build_use hdf5
+
+#endif

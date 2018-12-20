@@ -1,0 +1,25 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_nomutex
+#define inlib_nomutex
+
+// dummy mutex class.
+
+namespace inlib {
+
+class nomutex {
+public:
+  nomutex(){}
+  virtual ~nomutex(){}
+private:
+  nomutex(const nomutex&) {}
+  nomutex& operator=(const nomutex&){return *this;}
+public:
+  void lock() {}
+  void unlock() {}
+};
+
+}
+
+#endif

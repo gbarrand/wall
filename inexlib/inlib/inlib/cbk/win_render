@@ -1,0 +1,45 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_cbk_win_render
+#define inlib_cbk_win_render
+
+//used in sg/image_grid.
+
+#include "../sg/ui"
+
+namespace inlib {
+namespace cbk {
+
+class win_render : public sg::bcbk {
+  typedef sg::bcbk parent;
+public:
+  virtual sg::return_action action() {
+    m_ui.win_render();
+    return sg::return_to_render;     
+  }
+  virtual sg::bcbk* copy() const {return new win_render(*this);}
+public:
+  win_render(sg::ui& a_ui)
+  :parent()
+  ,m_ui(a_ui)
+  {
+    m_single_shoot = true;
+  }
+  virtual ~win_render(){}
+protected:
+  win_render(const win_render& a_from)
+  :parent(a_from)
+  ,m_ui(a_from.m_ui)
+  {}
+  win_render& operator=(const win_render& a_from){
+    parent::operator=(a_from);
+    return *this;
+  }
+protected:
+  sg::ui& m_ui;
+};
+
+}}
+
+#endif

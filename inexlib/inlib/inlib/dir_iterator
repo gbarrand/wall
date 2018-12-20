@@ -1,0 +1,112 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_dir_iterator
+#define inlib_dir_iterator
+
+#include "file_iterator"
+#include "sys/dir"
+#include "file"
+
+namespace inlib {
+
+class dir_iterator : public file_iterator {
+public:
+  virtual size_t entries() const {return m_files.size();}
+  virtual size_t index() const {return m_index;}
+  virtual bool next() {m_index++;return true;}
+  virtual bool rewind() {m_index = 0;return true;}
+public:
+  virtual bool open(const std::string& a_dir) {
+    m_files.clear();
+    m_index = 0;
+
+    std::vector<std::string> ls;
+    if(!dir::entries(a_dir,ls,true)) {
+      m_out << "inlib::dir_iterator::open :"
+            << " can't get entrie of " << a_dir << "."
+            << std::endl;
+      return false; 
+    }
+    std::vector<std::string>::const_iterator it;
+    for(it=ls.begin();it!=ls.end();++it) {
+      const std::string& path = *it;
+      bool is_dir;
+      if(!dir::is_a(path,is_dir)||is_dir) continue;
+      m_files.push_back(path);
+    }
+    if(m_files.empty()) {
+      m_out << "inlib::dir_iterator::open :"
+            << " no interesting file found in " << a_dir << "."
+            << std::endl;
+      return false; 
+    }
+
+    if(m_verbose) {
+      m_out << "inlib::dir_iterator::open :"
+            << " number of entries " << m_files.size()
+            << std::endl;
+    }
+
+    return true;
+  }
+
+  //virtual bool close() {return _close();}
+
+/*
+  virtual bool begin_file(std::string& a_file) {
+    if(m_index>=m_files.size()) {a_file.clear();return false;}
+    a_file = m_files[m_index];
+    return true;      
+  }
+  virtual bool end_file(const std::string&) {return true;}
+*/
+
+  virtual bool begin_buffer(size_t& a_sz,char*& a_buffer) {
+    long sz;
+    bool status = file::read_bytes(m_files[m_index],a_buffer,sz);
+    a_sz = (size_t)sz;
+    return status;
+  }
+  virtual bool end_buffer(char*& a_buffer) {
+    delete [] a_buffer;
+    a_buffer = 0;
+#ifdef INLIB_MEM
+    mem::decrement(s_new().c_str());
+#endif
+    return true;
+  }
+
+public:
+  dir_iterator(std::ostream& a_out,bool a_verbose = false)
+  :file_iterator(a_out,a_verbose)
+  ,m_index(0)
+  {}
+  virtual ~dir_iterator(){_close();}
+public:
+  dir_iterator(const dir_iterator& a_from)
+  :file_iterator(a_from)
+  ,m_index(a_from.m_index)
+  {}
+  dir_iterator& operator=(const dir_iterator&  a_from){
+    file_iterator::operator=(a_from);
+    if(&a_from==this) return *this;
+    _close();
+    return *this;
+  }
+protected:
+  bool _close() {
+    m_files.clear();
+    m_index = 0;
+    return true;
+  }
+protected:
+  std::vector<std::string> m_files;
+  size_t m_index;
+};
+
+}
+
+//inlib_build_use kernel
+
+#endif

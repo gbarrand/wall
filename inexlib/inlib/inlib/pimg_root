@@ -1,0 +1,183 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_pimg_root
+#define inlib_pimg_root
+
+#include "rroot/file"
+#include "rroot/buffer"
+
+#include <ostream>
+
+template <class TYPE>
+inline bool read(std::ostream& a_out,inlib::rroot::file* a_id,
+                 unsigned int& a_w,unsigned int& a_h,TYPE*& a_buffer,
+                 bool a_verbose = false) {
+  a_w = 0;
+  a_h = 0;
+  a_buffer = 0;
+
+  inlib::rroot::key* key = a_id->dir().find_key("inlib::img");
+  if(!key) {
+    a_out << "inlib::pimg_root::read : key not found." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+
+  if((key->object_class()!="inlib::img<float>")) {
+    a_out << "inlib::pimg_root::read : key not a inlib::img<float>." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+
+  unsigned int sz;
+  char* buf = key->get_object_buffer(*a_id,sz); //we don't have ownership of buf.
+  if(!buf) {
+    a_out << "inlib::pimg_root::read : get_object_buffer() failed." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+
+  inlib::rroot::buffer b(a_out,a_id->byte_swap(),sz,buf,key->key_length(),false);
+
+  unsigned int v;
+  if(!b.read(v)) {
+    a_out << "inlib::pimg_root::read : read version failed." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+  unsigned int m_w;
+  if(!b.read(m_w)) {
+    a_out << "inlib::pimg_root::read : read m_w failed." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+  unsigned int m_h;
+  if(!b.read(m_h)) {
+    a_out << "inlib::pimg_root::read : read m_h failed." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+  unsigned int m_n;
+  if(!b.read(m_n)) {
+    a_out << "inlib::pimg_root::read : read m_n failed." << std::endl;
+    delete a_id;a_id = 0; //close file.
+    return false;
+  }
+
+  float* m_buffer = 0;
+  unsigned int n;
+  if(!b.read_array(0,m_buffer,n)) {
+    a_out << "inlib::pimg_root::read : read m_buffer failed." << std::endl;
+    delete a_id;a_id = 0;
+    return false;
+  }
+
+  if(n!=m_w*m_h*m_n) {
+    a_out << "inlib::pimg_root::read : size mismatch." << std::endl;
+    delete [] m_buffer;
+    return false;
+  }
+
+  a_w = m_w;
+  a_h = m_h;
+  a_buffer = m_buffer;
+
+  delete a_id;a_id = 0; //close file.
+
+  return true;
+}
+
+inline bool open_read(std::ostream& a_out,const std::string& a_file,inlib::rroot::file*& a_id) {
+  a_id = new inlib::rroot::file(a_out,a_file,false);
+  if(!a_id->is_open()) {
+    a_out << "inlib::pimg_root::open_read : can't open file." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+//}
+
+#include "img"
+#include "wroot/bufobj"
+#include "wroot/streamers"
+
+//namespace exlib {
+
+template <class TYPE>
+inline bool write(std::ostream& a_out,inlib::wroot::file* a_id,const inlib::img<TYPE>& a_img) {
+  if(a_img.is_empty()) {
+    delete a_id;a_id = 0;
+    return false;
+  }
+
+  std::vector<float> vec;
+  //if(!a_buffer.write_array(a_axis.edges())) return false; //TArrayF
+
+  std::string name = "inlib::img";
+  std::string title;
+
+  inlib::wroot::bufobj* bo = new inlib::wroot::bufobj(a_out,a_id->byte_swap(),256,name,title,"inlib::img<float>");
+  unsigned int v = 1;
+  if(!bo->write(v)) {
+    delete bo;
+    delete a_id;a_id = 0;
+    return false;
+  }
+  if(!bo->write(a_img.width())) {
+    delete bo;
+    delete a_id;a_id = 0;
+    return false;
+  }
+  if(!bo->write(a_img.height())) {
+    delete bo;
+    delete a_id;a_id = 0;
+    return false;
+  }
+  if(!bo->write(a_img.bpp())) {
+    delete bo;
+    delete a_id;a_id = 0;
+    return false;
+  }
+  unsigned int sz = a_img.width()*a_img.height()*a_img.bpp();
+  if(!bo->write_array((float*)a_img.buffer(),sz)) {
+    delete bo;
+    delete a_id;a_id = 0;
+    return false;
+  }
+
+  a_id->dir().append_object(bo);
+
+ {unsigned int n;
+  if(!a_id->write(n)) {
+    a_out << "file write failed." << std::endl;
+  }}
+  
+  a_id->close();
+
+  delete a_id;a_id = 0; //close file.
+
+  return true;
+}
+
+inline bool open_write(std::ostream& a_out,const std::string& a_file,inlib::wroot::file*& a_id) {
+  ::remove(a_file.c_str());
+  a_id = new inlib::wroot::file(a_out,a_file);
+  if(!a_id->is_open()) {
+    delete a_id;
+    a_id = 0;
+    a_out << "inlib::pimg_root::open_write : can't create file " << a_file << "." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+template <class TYPE>
+inline bool write_root(std::ostream& a_out,const std::string& a_file,const inlib::img<TYPE>& a_img) {
+  inlib::wroot::file* id;
+  if(!open_write(a_out,a_file,id)) return false;
+  return write(a_out,id,a_img);
+}
+
+#endif

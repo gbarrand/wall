@@ -1,0 +1,207 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file exlib.license for terms.
+
+#ifndef exlib_hdf5_pimg
+#define exlib_hdf5_pimg
+
+#include "tools"
+#include "T_tools"
+
+#include <ostream>
+
+// NOTE : explicitly not namespaced since "open_read", "open_write", "read", "write"
+//        indirectly used in the inlib/inlib/pmerge templates without namespace.
+//        See also exlib/exlib/pimg_cfitsio. Indirectly used in exlib/app/phdf5.cpp.
+
+//namespace exlib {
+//namespace hdf5 {
+
+template <class TYPE>
+inline bool read(std::ostream& a_out,hid_t a_hid,
+                 unsigned int& a_w,unsigned int& a_h,TYPE*& a_buffer,
+                 bool a_verbose = false) {
+  a_w = 0;
+  a_h = 0;
+  a_buffer = 0;
+
+  hid_t _img = H5Gopen(a_hid,"inlib::img");
+  if(_img<0) {
+    a_out << "exlib::hdf5::pimg::read : can't open group." << std::endl;
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  std::string sclass;
+  if(!exlib::hdf5::read_atb(_img,"class",sclass)) {
+    a_out << "exlib::hdf5::pimg::read : can't read atb class." << std::endl;
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  if(sclass!="inlib::img") {
+    a_out << "exlib::hdf5::pimg::read : unknown class : " << sclass << std::endl;
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  unsigned int m_w;
+  if(!exlib::hdf5::read_atb(_img,"m_w",m_w)) {
+    a_out << "exlib::hdf5::pimg::read : can't read atb m_w." << std::endl;
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+  unsigned int m_h;
+  if(!exlib::hdf5::read_atb(_img,"m_h",m_h)) {
+    a_out << "exlib::hdf5::pimg::read : can't read atb m_h." << std::endl;
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+  unsigned int m_n;
+  if(!exlib::hdf5::read_atb(_img,"m_n",m_n)) {
+    a_out << "exlib::hdf5::pimg::read : can't read atb m_n." << std::endl;
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  unsigned int sz;
+  TYPE* m_buffer;
+  if(!exlib::hdf5::read_array<TYPE>(_img,"m_buffer",exlib::hdf5::to_T_mem_type(TYPE()),sz,m_buffer)) {
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  if(sz!=m_w*m_h*m_n) {
+    a_out << "exlib::hdf5::pimg::read : size mismatch." << std::endl;
+    delete [] m_buffer;
+    H5Gclose(_img);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  a_w = m_w;
+  a_h = m_h;
+  a_buffer = m_buffer;
+
+  H5Gclose(_img);
+  H5Fclose(a_hid);
+
+  return true;
+}
+
+inline bool open_read(std::ostream& a_out,const std::string& a_file,hid_t& a_hid) {
+  a_hid = H5Fopen(a_file.c_str(),H5F_ACC_RDONLY, H5P_DEFAULT);
+  if(a_hid<0) {
+    a_out << "exlib::hdf5::pimg::open_read : can't open file." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+//}}
+
+#include <inlib/img>
+
+//namespace exlib {
+//namespace hdf5 {
+
+template <class TYPE>
+inline bool write(std::ostream& a_out,hid_t a_hid,const inlib::img<TYPE>& a_img) {
+  if(a_img.is_empty()) {
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  hid_t himg = H5Gcreate(a_hid,"inlib::img",0);
+  if(himg<0) {
+    a_out << "exlib::hdf5::pimg::write : can't create group." << std::endl;
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  if(!exlib::hdf5::write_atb(himg,"type","object")) {
+    a_out << "exlib::hdf5::pimg::write : write atb class failed." << std::endl;
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+  if(!exlib::hdf5::write_atb(himg,"class","inlib::img")) {
+    a_out << "exlib::hdf5::pimg::write : write atb class failed." << std::endl;
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+  int v = 1;
+  if(!exlib::hdf5::write_scalar_atb(himg,"version",v)) {
+    a_out << "exlib::hdf5::pimg::write : write atb version failed." << std::endl;
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  if(!exlib::hdf5::write_scalar_atb(himg,"m_w",a_img.width())) {
+    a_out << "exlib::hdf5::pimg::write : write atb m_w failed." << std::endl;
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+  if(!exlib::hdf5::write_scalar_atb(himg,"m_h",a_img.height())) {
+    a_out << "exlib::hdf5::pimg::write : write atb m_h failed." << std::endl;
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+  if(!exlib::hdf5::write_scalar_atb(himg,"m_n",a_img.bpp())) {
+    a_out << "exlib::hdf5::pimg::write : write atb m_n failed." << std::endl;
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  unsigned int sz = a_img.width()*a_img.height()*a_img.bpp();
+
+  int compress = 0;
+
+  if(!exlib::hdf5::write_array<TYPE>(himg,"m_buffer",
+                                    exlib::hdf5::to_T_file_type(TYPE()),
+                                    exlib::hdf5::to_T_mem_type(TYPE()),false,compress,
+                                    sz,a_img.buffer())) {
+    H5Gclose(himg);
+    H5Fclose(a_hid);
+    return false;
+  }
+
+  H5Gclose(himg);
+
+  H5Fclose(a_hid);
+
+  return true;
+}
+
+inline bool open_write(std::ostream& a_out,const std::string& a_file,hid_t& a_hid) {
+  ::remove(a_file.c_str());
+  a_hid = H5Fcreate(a_file.c_str(),H5F_ACC_TRUNC,H5P_DEFAULT,H5P_DEFAULT);
+  if(a_hid<0) {
+    a_out << "exlib::hdf5::pimg::open_write : can't create file " << a_file << "." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+template <class TYPE>
+inline bool write_hdf5(std::ostream& a_out,const std::string& a_file,const inlib::img<TYPE>& a_img) {
+  hid_t hid;
+  if(!open_write(a_out,a_file,hid)) return false;
+  return write(a_out,hid,a_img);
+}
+
+//}}
+
+//exlib_build_use inlib hdf5
+
+#endif

@@ -1,0 +1,241 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_sg_path_desc
+#define inlib_sg_path_desc
+
+#include "search_action"
+#include "search"
+#include "group"
+#include "noderef"
+
+#include "base_list"
+#include "text"
+#include "entries"
+#include "arrow_button"
+#include "cube_manip"
+// for wall :
+#include "button_grid"
+#include "simple_button"
+
+#include "../num2s"
+
+namespace inlib {
+namespace sg {
+
+inline void path_dump(std::ostream& a_out,const path_t& a_path) {
+  a_out << "path size " << a_path.size() << " begin :" << std::endl;
+  unsigned int level = 0;
+  std::string sp;
+  inlib_vforcit(node*,a_path,it) {
+    node* _node = *it;
+    if(!p2s(_node,sp)) {}
+    noderef* ref = safe_cast<node,noderef>(*_node);
+    if(ref) {
+      a_out << "level " << level << ", node " << sp << ", ref of class " << ref->node().s_cls();
+      group* _grp = safe_cast<node,group>(ref->node());
+      if(_grp) {
+        if(!p2s(_grp,sp)) {}
+        a_out << ", group (" << sp << ") #child " << _grp->size();
+      }
+      a_out << std::endl;
+      if(_grp) {
+        inlib_vforcit(node*,_grp->children(),itg) {
+          if(!p2s(*itg,sp)) {}
+          a_out << "  child (" << sp << ") " << (*itg)->s_cls() << std::endl;
+        }
+      }
+    } else {
+      a_out << "level " << level << ", node " << sp << ", class " << _node->s_cls();
+      group* _grp = safe_cast<node,group>(*_node);
+      if(_grp) {
+        if(!p2s(_grp,sp)) {}
+        a_out << ", group (" << sp << ") #child " << _grp->size();
+      }
+      a_out << std::endl;
+      if(_grp) {
+        inlib_vforcit(node*,_grp->children(),itg) {
+          if(!p2s(*itg,sp)) {}
+          a_out << "  child (" << sp << ") " << (*itg)->s_cls() << std::endl;
+        }
+      }
+    }
+    level++;
+  }
+  a_out << "path end." << std::endl;
+}  
+
+inline void node_path_dump(std::ostream& a_out,node& a_from,node& a_node) {
+  search_action action(a_out);
+  path_dump(a_out,find_path(action,a_from,a_node,false));
+}
+
+#define INLIB_SG_PATH_DESC_ADD_KIT(a__class) \
+ {a__class* kit = safe_cast<node,a__class>(*(*a_it));\
+  if(kit) {\
+    if((a_it+1)==a_path.end()) {a_group = 0;return true;}\
+    a_it++; /*because next node in the path is the kit container node.*/\
+    if(*a_it!=&(kit->container())) {a_group = 0;return false;} /*something wrong.*/\
+    return is_container(a_path,a_it,a_group);\
+  }}
+
+inline bool is_container(const path_t& a_path,path_t::const_iterator& a_it,group*& a_group) {
+  a_group = safe_cast<node,group>(*(*a_it));
+  if(a_group) return true;
+ {noderef* ref = safe_cast<node,noderef>(*(*a_it));
+  if(ref) {
+    a_it++; //because for a ref, next node in the path is the referenced node.
+    if(a_it==a_path.end()) {a_group = 0;return false;} //something wrong.
+    if(*a_it!=&(ref->node())) {a_group = 0;return false;} //something wrong.
+    return is_container(a_path,a_it,a_group);
+  }}
+  INLIB_SG_PATH_DESC_ADD_KIT(text)
+  INLIB_SG_PATH_DESC_ADD_KIT(entries)
+  INLIB_SG_PATH_DESC_ADD_KIT(entry)
+  INLIB_SG_PATH_DESC_ADD_KIT(keyboard)
+  INLIB_SG_PATH_DESC_ADD_KIT(numeric)
+  INLIB_SG_PATH_DESC_ADD_KIT(edvalop)
+  INLIB_SG_PATH_DESC_ADD_KIT(colors)
+  INLIB_SG_PATH_DESC_ADD_KIT(arrow_button)
+  INLIB_SG_PATH_DESC_ADD_KIT(cube_manip)
+  INLIB_SG_PATH_DESC_ADD_KIT(base_list)
+  INLIB_SG_PATH_DESC_ADD_KIT(button_grid<simple_button>) //for wall select menu screen.
+  a_group = 0;
+  return true; // not a container, but it is ok.
+}
+
+#undef INLIB_SG_PATH_DESC_ADD_KIT
+
+inline bool node_path_desc(std::ostream& a_out,node& a_from,node& a_node,std::string& a_desc,bool a_verbose = false){
+  // a_desc = [[<pos>,head]/<class>]
+  a_desc.clear();
+  search_action action(a_out);
+  const path_t& path = find_path(action,a_from,a_node,false);
+  if(path.empty()) {
+    a_out << "inlib::sg::node_path_desc : find_path() failed." << std::endl;
+    return false;
+  }
+  std::string sep("/");
+  path_t::const_iterator it = path.begin();
+  a_desc += "head";
+  a_desc += sep;
+  a_desc += (*it)->s_cls();
+  group* parent;
+  if(!is_container(path,it,parent)) {
+    a_out << "inlib::sg::node_path_desc : is_container() failed at head." << std::endl;
+    a_desc.clear();
+    return false;
+  }
+  it++;
+
+  std::string sn,sp;
+  unsigned int count = 0;
+  if(a_verbose) a_out << "inlib::sg::node_path_desc : begin :" << std::endl;
+
+  while(it!=path.end()) {
+    if(!parent) {
+      a_out << "inlib::sg::node_path_desc : node without parent." << std::endl;
+      a_desc.clear();
+      return false;
+    }
+    node* _node = *it;
+
+    if(a_verbose) {
+      if(!p2s(_node,sn)) {}
+      if(!p2s(parent,sp)) {}
+      a_out << " Count " << count << "."
+            << " Search node (" << sn << ") " << _node->s_cls() << ", in parent (" << sp << ") " << parent->s_cls() 
+            << ", parent.size() " << parent->size() << "."
+            << std::endl;
+    }
+
+    unsigned int index;
+    if(!parent->position(_node,index)) {
+      if(!p2s(parent,sp)) {}
+      if(!p2s(_node,sn)) {}
+      //if(a_verbose)
+      a_out << "inlib::sg::node_path_desc :"
+            << " parent.position() failed."
+            << " Search node (" << sn << ") " << _node->s_cls() << " in parent (" << sp << ") " << parent->s_cls() 
+            << ", parent.size() " << parent->size() << "."
+            << std::endl;
+      a_desc.clear();
+      return false;
+    }
+    a_desc += sep;
+    numas(index,a_desc);
+    a_desc += sep;
+    a_desc += _node->s_cls();
+    if(!is_container(path,it,parent)) {
+      a_out << "inlib::sg::node_path_desc : is_container() failed." << std::endl;
+      a_desc.clear();
+      return false;
+    }
+    it++;
+    count++;
+  }
+  if(a_verbose) a_out << "inlib::sg::node_path_desc : end." << std::endl;
+  return true;
+}  
+
+}}
+
+/*
+#include "../words"
+#include "../sto"
+
+namespace inlib {
+namespace sg {
+
+template <class CONTAINER>
+inline void path_desc_to_node(std::ostream& a_out,const std::string& a_desc,node& a_from,node*& a_node) {
+  a_node = 0;
+  std::vector<std::string> items;
+  words(a_desc,"/",false,items);
+  if(items.empty()) return;
+  std::vector<std::string>::const_iterator it = items.begin();
+  if(items.size()==2) {
+    const std::string& sindex = *it;
+    const std::string& sclass = *(it+1);
+    if(sindex!="head") {
+      a_out << "inlib::sg::path_desc_to_node : head string expected." << std::endl;
+      return;
+    }
+    if(sclass!=a_from.s_cls()) {
+      a_out << "inlib::sg::path_desc_to_node : head class mismatch." << std::endl;
+      return;
+    }
+    a_node = &a_from;
+    return;
+  }
+  CONTAINER* current = safe_cast<node,CONTAINER>(a_from);
+  it += 2;  
+  for(;it!=items.end();it+=2) {
+    if(!current) return;
+    const std::string& sindex = *it;
+    const std::string& sclass = *(it+1);
+    unsigned int index;
+    if(!to(sindex,index)) {a_node = 0;return;}
+    node* _node = current->node_at(index);
+    if(!_node) {
+      a_out << "inlib::sg::path_desc_to_node : node_at(" << index << ") failed." << std::endl;
+      a_out << "  current.size() = " << current->size() << "." << std::endl;
+      a_node = 0;
+      return;
+    }
+    if(_node->s_cls()!=sclass) {
+      a_out << "inlib::sg::path_desc_to_node : node class mismatch." << std::endl;
+      a_node = 0;
+      return;
+    }
+    a_node = _node;
+    current = safe_cast<node,CONTAINER>(*_node);
+  }  
+}  
+
+}}
+*/
+
+//inlib_build_use kernel
+
+#endif

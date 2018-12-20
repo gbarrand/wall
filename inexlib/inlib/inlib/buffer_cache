@@ -1,0 +1,79 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_buffer_cache
+#define inlib_buffer_cache
+
+#include "typedefs"
+#include "newdel"
+#include "vpair"
+#include "forit"
+#include <string>
+
+namespace inlib {
+
+template <class MUTEX>
+class buffer_cache {
+  typedef std::pair<char*,uint64> buffer_t;
+  typedef std::pair<std::string,buffer_t> named_buffer_t;
+  typedef std::vector<named_buffer_t> cache_t;
+public:
+  buffer_cache():m_mutex(),m_size(16) {
+    //::printf("debug : inlib::buffer_cache::buffer_cache()\n");
+  }
+  virtual ~buffer_cache(){
+    m_mutex.lock();
+    _clear();
+    m_mutex.unlock();
+  }
+private:
+//public:
+  buffer_cache(const buffer_cache& a_from)
+  :m_mutex()
+  ,m_size(a_from.m_size)
+  {}
+  buffer_cache& operator=(const buffer_cache& a_from){
+    m_size = a_from.m_size;
+    return *this;
+  }
+public:
+  void set_size(size_t a_size) {m_size = a_size;}
+  bool find(const std::string& a_key,char*& a_buffer,uint64& a_length) const {
+    buffer_cache& self = const_cast<buffer_cache&>(*this);
+    self.m_mutex.lock();
+    buffer_t _buffer;
+    bool status = inlib::find(m_cache,a_key,_buffer); //of vpair. inlib:: needed.
+    a_buffer = _buffer.first;
+    a_length = _buffer.second;
+    self.m_mutex.unlock();
+    return status;
+  }
+  void add(const std::string& a_key,char* a_buffer,uint64 a_length) {
+    // we take ownership of a_buffer.
+    m_mutex.lock();
+    m_cache.push_back(named_buffer_t(a_key,buffer_t(a_buffer,a_length)));
+    m_mutex.unlock();
+  }
+  void check_clear() {
+    m_mutex.lock();
+    if(m_cache.size()>=m_size) _clear();
+    m_mutex.unlock();
+  }
+protected:
+  void _clear() {
+    //::printf("debug : inlib::buffer_cache::_clear()\n");
+    inlib_vforcit(named_buffer_t,m_cache,it) {
+      char* buffer = (*it).second.first;
+      mdel(buffer);
+    }
+    m_cache.clear();
+  }
+protected:
+  MUTEX m_mutex;
+  cache_t m_cache;
+  size_t m_size;
+};
+
+}
+
+#endif

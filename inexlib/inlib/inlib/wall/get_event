@@ -1,0 +1,179 @@
+// Copyright (C) 2010, Guy Barrand. All rights reserved.
+// See the file inlib.license for terms.
+
+#ifndef inlib_wall_get_event
+#define inlib_wall_get_event
+
+#include "../net/base_socket"
+#include "event"
+#include "evt_user"
+#include "rbuf"
+#include "../sout"
+
+namespace inlib {
+namespace wall {
+
+inline bool wait_event(net::base_socket& a_sock,event& a_event) {
+  uint64 sz;
+  if(!a_sock.fetch<uint64>(sz)) return false;
+
+  rbuf b((unsigned int)sz);
+  if(!b.buf()) return false;
+  uint64 BLOCK = 1048576; //65536*16
+  if(!a_sock.fetch_buffer((char*)b.buf(),sz,BLOCK)) return false;
+
+  if(!b.read<uchar>(a_event.type)) return false;
+
+  if( (a_event.type==EVT_QUIT) ||
+      (a_event.type==EVT_NOEVENT) ){
+
+  } else if( (a_event.type==EVT_KEYDOWN) ||
+             (a_event.type==EVT_KEYUP)   ){
+
+    if(!b.read<uchar>(a_event.key.type)) return false;
+
+    unsigned short v;
+
+    if(!b.read<ushort>(v)) return false;
+    a_event.key.keysym.sym = (key)v;
+
+    if(!b.read<ushort>(v)) return false;
+    a_event.key.keysym.mod = (mod)v;
+
+  } else if(a_event.type==EVT_MOUSEMOTION) {
+    if(!b.read<uchar>(a_event.motion.type)) return false;
+    if(!b.read<uchar>(a_event.motion.which)) return false;
+    if(!b.read<uchar>(a_event.motion.state)) return false;
+    if(!b.read<coord_t>(a_event.motion.x)) return false;
+    if(!b.read<coord_t>(a_event.motion.y)) return false;
+    if(!b.read<rcoord_t>(a_event.motion.xrel)) return false;
+    if(!b.read<rcoord_t>(a_event.motion.yrel)) return false;
+
+  } else if((a_event.type==EVT_MOUSEBUTTONDOWN)  ||
+            (a_event.type==EVT_MOUSEBUTTONUP)    ){
+    if(!b.read<uchar>(a_event.button.type)) return false;
+    if(!b.read<uchar>(a_event.button.which)) return false;
+    if(!b.read<uchar>(a_event.button.button)) return false;
+    if(!b.read<uchar>(a_event.button.state)) return false;
+    if(!b.read<coord_t>(a_event.button.x)) return false;
+    if(!b.read<coord_t>(a_event.button.y)) return false;
+
+  } else if(a_event.type==EVT_USEREVENT) {
+    if(!b.read<uchar>(a_event.user.type)) return false;
+    if(!b.read<int>(a_event.user.code)) return false;
+
+    if(   (a_event.user.code==EVT_USER_QUIT())
+       || (a_event.user.code==EVT_USER_START_SYNC())
+       || (a_event.user.code==EVT_USER_SYNC_MOVE())
+       || (a_event.user.code==EVT_USER_SYNC_ANIM())
+       || (a_event.user.code==EVT_USER_SYNC_SCREEN())
+       || (a_event.user.code==EVT_USER_START_PICK())
+       ){
+      // user event with no data1, data2 :
+
+      a_event.user.data1 = 0;
+      a_event.user.data2 = 0;
+
+    } else if( (a_event.user.code==EVT_USER_FILE())
+            || (a_event.user.code==EVT_USER_DOCUMENT()) 
+            || (a_event.user.code==EVT_USER_COMMAND()) 
+            || (a_event.user.code==EVT_USER_STRING()) 
+            || (a_event.user.code==EVT_USER_GET_FILE()) 
+            || (a_event.user.code==EVT_USER_GET_URL()) 
+            || (a_event.user.code==EVT_USER_POST_URL()) 
+            || (a_event.user.code==EVT_USER_UPDATE_NODE()) 
+            || (a_event.user.code==EVT_USER_ANIM())
+            || (a_event.user.code==EVT_USER_PICK_SCREEN())
+            ){
+
+      unsigned int ls;
+      if(!b.read<unsigned int>(ls)) return false;
+
+      write_buffer<unsigned int>(ls,(char*)&(a_event.user.data1));
+
+      char* s = new char[ls+1];
+      if(!s) return false;
+#ifdef INLIB_MEM
+      mem::increment(s_new().c_str());
+#endif
+      if(!b.read(ls+1,s)) return false;
+      a_event.user.data2 = s;
+
+    } else if( (a_event.user.code==EVT_USER_UPDATE_KEY_MOTION())
+           ||  (a_event.user.code==EVT_USER_WINDOW_MASTER_SIZE())
+           ){
+
+      //WARNING : sizeof(void*) is not portable but is at least 4 bytes.
+      //          The below assumes that only 4 bytes of data
+      //          had been deposited on data1,data2.
+
+      if(!b.read(4,(char*)&(a_event.user.data1))) return false;
+      if(!b.read(4,(char*)&(a_event.user.data2))) return false;
+
+    } else {
+      return false;
+    }
+
+  } else {
+    return false;
+  }
+  return true;
+}
+
+inline void read_event_string(event& a_event,std::string& a_string) {
+  unsigned int length;
+  read_buffer<unsigned int>((char*)&(a_event.user.data1),length);
+  a_string.resize(length);
+  char* s = (char*)a_event.user.data2;
+  char* pos = s;
+  std::string::iterator it;
+  for(it=a_string.begin();it!=a_string.end();++it) {*it = *pos;pos++;}
+  delete [] s;
+#ifdef INLIB_MEM
+  mem::decrement(s_new().c_str());
+#endif
+  a_event.user.data1 = 0;
+  a_event.user.data2 = 0;
+}
+
+inline void read_event_file(std::ostream& a_out,
+                            event& a_event,
+                            const std::string& a_file,
+                            unsigned int& a_length) {
+  unsigned int length;
+  read_buffer<unsigned int>((char*)&(a_event.user.data1),length);
+  char* bufile = (char*)a_event.user.data2; //not 0.
+
+  if(!file::write_bytes(a_file,bufile,(size_t)length)) {
+    a_out << "inlib::wall::read_event_file : "
+          << " can't write file " << sout(a_file) << "."
+          << std::endl;
+  }
+
+  delete [] bufile;
+#ifdef INLIB_MEM
+  mem::decrement(s_new().c_str());
+#endif
+  a_event.user.data1 = 0;
+  a_event.user.data2 = 0;
+
+  a_length = length;
+}
+
+inline void read_event_buffer(event& a_event,
+                              size_t& a_sz,
+                              char*& a_buffer) {
+  unsigned int length;
+  read_buffer<unsigned int>((char*)&(a_event.user.data1),length);
+  a_sz = length;
+  a_buffer = (char*)a_event.user.data2; //not 0.
+  a_event.user.data1 = 0;
+  a_event.user.data2 = 0;
+}
+
+}}
+
+//inlib_build_use socket
+
+#endif
+
