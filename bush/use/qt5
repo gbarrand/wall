@@ -1,0 +1,40 @@
+# Copyright (C) 2010, Guy Barrand. All rights reserved.
+# See the file bush.license for terms.
+
+if [ "${use_Qt}" = "yes" ] ; then
+  if [ ${build_visual} = "yes" ] ; then
+    echo "bush/use/Qt : cl.exe : use_Qt not yet supported."
+    exit
+  fi
+
+  Qt_ld_library_path=
+  moc_exe=
+   
+  if [ `uname` = Darwin ] ; then
+
+    if [ -d /opt/local/libexec/qt5/include/QtUiTools ] ; then
+
+      Qt_home=/opt/local/libexec/qt5
+
+      Qt_frameworks="${Qt_home}/lib"
+      cppflags="${cppflags} -F${Qt_frameworks}"
+
+      libs="${libs} -F${Qt_frameworks} -framework QtOpenGL"
+      libs="${libs} -framework QtGui -framework QtCore"
+      libs="${libs} -framework QtWidgets"
+      
+      moc_exe="${Qt_home}/bin/moc"
+
+      #Qt_ld_library_path="${Qt_home}/lib"
+
+    fi
+
+  fi
+
+  if [ "${moc_exe}" = "" ] ; then
+    echo "bush/use/Qt : Qt not found."
+    exit
+  fi
+
+fi
+
