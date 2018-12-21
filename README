@@ -32,7 +32,7 @@
   At end of the build, you should have a distribution file :
     bin_<config>/distrib/<app>-<version>-<platform>.zip
 
- If having customized the mgr/install script, a "./install -wall" should copy and unzip the upper on all
+ If having customized the mgr/install script, a "./install wall" should copy and unzip the upper on all
  your machines under the same path (/usr/local/wall/<version> by default).
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
